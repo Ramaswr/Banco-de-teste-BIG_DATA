@@ -2,6 +2,9 @@
 
 ![Logo do Banco de teste BIG_DATA](assets/logo.svg)
 
+**Pasta local do projeto:** `JERR_BIG-DATA`
+
+
 [![CI](https://github.com/Ramaswr/Banco-de-teste-BIG_DATA/actions/workflows/python-package.yml/badge.svg)](https://github.com/Ramaswr/Banco-de-teste-BIG_DATA/actions/workflows/python-package.yml)
 [![License](https://img.shields.io/github/license/Ramaswr/Banco-de-teste-BIG_DATA.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/Ramaswr/Banco-de-teste-BIG_DATA.svg)](https://github.com/Ramaswr/Banco-de-teste-BIG_DATA/releases)
