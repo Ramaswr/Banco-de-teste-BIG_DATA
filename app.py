@@ -55,7 +55,7 @@ except:
 
 # ==================== CONFIGURAÇÃO ====================
 st.set_page_config(
-    page_title='📊 Painel de Análise de Dados',
+    page_title='📊 Jerr_BIG-DATE',
     layout='wide',
     initial_sidebar_state='expanded'
 )
@@ -112,8 +112,8 @@ def login_page():
     """Página de login segura."""
     st.markdown("""
     <div class='dashboard-header'>
-        <h1>🔐 Painel de Análise de Dados - Login</h1>
-        <p>Acesso seguro e protegido</p>
+        <h1>🔐 Jerr_BIG-DATE - Login</h1>
+        <p>Acesso seguro e protegido ao Jerr_BIG-DATE</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -139,7 +139,7 @@ def login_page():
                     st.session_state.session_id = session_id
                     st.session_state.authenticated = True
                     st.session_state.username = username
-                    st.success(f'✅ Bem-vindo, {username}!')
+                    st.success(f'Sejam bem-vindo a Jerr_BIG-DATE, {username}!')
                     st.rerun()
                 else:
                     st.error('❌ Usuário ou senha incorretos')
