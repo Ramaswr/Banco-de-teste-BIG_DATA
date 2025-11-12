@@ -79,3 +79,7 @@ Dockerfile
 
 # Environment
 .env
+.secrets/
+security.log
+secure_uploads/
+logs/

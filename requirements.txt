@@ -3,3 +3,7 @@ streamlit
 numpy
 matplotlib
 python-dateutil
+openpyxl
+pyarrow
+pydantic
+cryptography
