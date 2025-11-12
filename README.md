@@ -100,3 +100,27 @@ Arquivos úteis para GitHub
 Onde está a(s) imagem(ns)?
 
 Eu procurei por arquivos de imagem (`png`, `jpg`, `jpeg`, `gif`, `svg`) dentro do workspace atual e não encontrei nenhuma imagem presente no diretório do projeto. Se você tem uma imagem específica que quer incluir (por exemplo, um diagrama, logo ou captura de tela), adicione o arquivo ao projeto, por exemplo em `assets/` ou `docs/images/`. Depois disso eu atualizo o `README.md` para referenciar a imagem no topo do repositório.
+
+Verificação de integridade (SHA256)
+
+Para garantir que o arquivo `zip_Jerr.js` não foi corrompido ou alterado durante o download, você pode verificar o checksum SHA256:
+
+**Linux/Mac:**
+```bash
+sha256sum -c zip_Jerr.js.sha256
+```
+
+**Windows (PowerShell):**
+```powershell
+certUtil -hashfile zip_Jerr.js SHA256
+# compare com o valor em zip_Jerr.js.sha256
+```
+
+**macOS (alternativa):**
+```bash
+shasum -a 256 -c zip_Jerr.js.sha256
+```
+
+Se o checksum corresponder, o arquivo está íntegro e pronto para uso/análise.
+
+````
