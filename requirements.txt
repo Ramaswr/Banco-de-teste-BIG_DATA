@@ -1,0 +1,5 @@
+pandas
+streamlit
+numpy
+matplotlib
+python-dateutil
