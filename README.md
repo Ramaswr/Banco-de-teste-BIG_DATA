@@ -23,6 +23,36 @@ Se prefere uma forma rápida e automática, execute:
 ./run.sh
 ```
 
+### Modo Público (execução pública, código em somente leitura)
+
+Se desejar expor o app na rede (por exemplo em uma LAN ou servidor público) mantendo o código e a estrutura em modo somente leitura para outros usuários, siga os passos abaixo.
+
+1. Torne o app público (bind em 0.0.0.0) e proteja com autenticação:
+
+```bash
+# Iniciar em modo público (o app ficará acessível em todas as interfaces)
+PUBLIC_MODE=1 ./run.sh
+```
+
+2. Ajuste permissões para deixar arquivos do projeto legíveis (somente leitura para outros) e proteger diretórios sensíveis:
+
+```bash
+# Executar script que aplica permissões seguras
+./make_public_readonly.sh
+```
+
+3. Recomendado (IMPORTANTE para produção):
+- Coloque o app atrás de um reverse-proxy (nginx/caddy) e habilite HTTPS/TLS.
+- Configure firewall para limitar IPs que podem acessar o serviço.
+- Não compartilhe `.secrets/credentials.json`; ele permanece protegido (modo 600).
+
+Com essa configuração:
+- O app exige login (`Jerr` + sua senha) para executar funcionalidades.
+- Usuários externos poderão acessar a interface e executar o app (se autenticados), mas não poderão alterar os arquivos do projeto (apenas leitura).
+- Diretórios sensíveis (`.secrets`, `secure_uploads`, `logs`) têm permissões restritas (700).
+
+----
+
 Este script irá:
 - ✓ Criar ambiente virtual (se necessário)
 - ✓ Instalar todas as dependências

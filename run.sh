@@ -46,7 +46,12 @@ fi
 echo ""
 echo "🚀 Iniciando Streamlit app..."
 echo ""
-echo "📍 Abrindo em: http://localhost:8501"
+if [ "${PUBLIC_MODE:-0}" = "1" ]; then
+  echo "📍 Abrindo em: http://0.0.0.0:8501 (modo público - somente execução via login)"
+  echo "⚠️ ATENÇÃO: Em modo público, configure HTTPS/reverse-proxy em produção!"
+else
+  echo "📍 Abrindo em: http://localhost:8501"
+fi
 echo "   (Se o navegador não abrir automaticamente, acesse a URL acima)"
 echo ""
 echo "💡 Dicas:"
@@ -56,9 +61,18 @@ echo "   - Mostrar menu: Pressione 'C' no navegador"
 echo ""
 
 # 5. Abrir navegador (se disponível)
-if command -v xdg-open &> /dev/null; then
-  # Linux
-  xdg-open http://localhost:8501 &
+if [ "${PUBLIC_MODE:-0}" != "1" ]; then
+  if command -v xdg-open &> /dev/null; then
+    # Linux
+    xdg-open http://localhost:8501 &
+  elif command -v open &> /dev/null; then
+    # macOS
+    open http://localhost:8501 &
+  elif command -v start &> /dev/null; then
+    # Windows
+    start http://localhost:8501 &
+  fi
+fi
 elif command -v open &> /dev/null; then
   # macOS
   open http://localhost:8501 &
@@ -68,7 +82,13 @@ elif command -v start &> /dev/null; then
 fi
 
 # 6. Executar Streamlit
-streamlit run app.py --server.port=8501 --server.address=localhost
+if [ "${PUBLIC_MODE:-0}" = "1" ]; then
+  # Bind to all interfaces for public access; keep app authentication enforced.
+  streamlit run app.py --server.port=8501 --server.address=0.0.0.0 \
+    --server.enableCORS=false --server.enableXsrfProtection=true
+else
+  streamlit run app.py --server.port=8501 --server.address=localhost
+fi
 
 echo ""
 echo "✓ App finalizado"
