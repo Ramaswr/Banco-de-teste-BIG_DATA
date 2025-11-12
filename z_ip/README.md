@@ -6,10 +6,6 @@
 
 ![Logo do Banco de teste BIG_DATA](assets/logo.svg)
 
-[![CI](https://github.com/Ramaswr/Banco-de-teste-BIG_DATA/actions/workflows/python-package.yml/badge.svg)](https://github.com/Ramaswr/Banco-de-teste-BIG_DATA/actions/workflows/python-package.yml)
-[![License](https://img.shields.io/github/license/Ramaswr/Banco-de-teste-BIG_DATA.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/Ramaswr/Banco-de-teste-BIG_DATA.svg)](https://github.com/Ramaswr/Banco-de-teste-BIG_DATA/releases)
-
 Pequeno projeto para rodar o ETL que você enviou, sem dependências do Google Colab. Inclui:
 
 - `etl.py` — script CLI com funções de leitura, limpeza e agregação; gera CSVs de saída.
