@@ -1,0 +1,18 @@
+[Unit]
+Description=Streamlit app Jerr_BIG-DATE
+After=network.target
+
+[Service]
+Type=simple
+User=jerr
+Group=jerr
+# Ensure the virtualenv path matches local setup
+Environment=PATH=/home/jerr/Downloads/Projeto\ extencionista\ BIG_DATA/.venv/bin:/usr/local/bin:/usr/bin
+WorkingDirectory=/home/jerr/Downloads/Projeto\ extencionista\ BIG_DATA
+ExecStart=/home/jerr/Downloads/Projeto\ extencionista\ BIG_DATA/.venv/bin/streamlit run /home/jerr/Downloads/Projeto\ extencionista\ BIG_DATA/app.py --server.port=8501 --server.address=127.0.0.1
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
