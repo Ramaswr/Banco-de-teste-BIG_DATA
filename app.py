@@ -14,6 +14,7 @@ import os
 import users as user_mgmt
 import secrets
 from utils.mailer import send_verification_email, send_phone_otp
+from utils.password_strength import check_password_strength, get_strength_label, get_strength_color
 from ocr import image_to_text, pdf_to_tables_csv, save_text_as_csv_for_user
 from security import (
     credentials,
@@ -146,6 +147,19 @@ def login_page():
         r_email = st.text_input("Email (opcional)", key="reg_email")
         r_phone = st.text_input("Telefone (opcional)", key="reg_phone")
         r_password = st.text_input("Senha", type="password", key="reg_pass")
+
+        # Password strength meter
+        if r_password:
+            strength = check_password_strength(r_password, user_inputs=[r_username, r_email] if r_username or r_email else [])
+            score = strength["score"]
+            label = get_strength_label(score)
+            color = get_strength_color(score)
+            st.markdown(f"<p style='color:{color};font-weight:bold;'>Força: {label}</p>", unsafe_allow_html=True)
+            if strength["warning"]:
+                st.warning(f"⚠️ {strength['warning']}")
+            if strength["feedback"]:
+                st.info(f"Sugestões: {', '.join(strength['feedback'][:2])}")
+
         r_password2 = st.text_input(
             "Confirme a senha", type="password", key="reg_pass2"
         )

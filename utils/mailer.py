@@ -20,6 +20,8 @@ def send_verification_email(to_email: str, username: str, token: str, site_base:
 
 
 def send_phone_otp(phone: str, username: str, otp: str) -> bool:
-    # Placeholder: no SMS provider configured. For now log to stdout.
-    print(f"[OTP] user={username} phone={phone} otp={otp}")
-    return False
+    """Send OTP via SMS using utils.sms integration."""
+    from utils.sms import send_otp
+    success, msg = send_otp(phone, otp, username)
+    print(msg)
+    return success
