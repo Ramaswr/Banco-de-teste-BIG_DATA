@@ -11,8 +11,11 @@ import importlib
 import io
 from security import (
     credentials, rate_limiter, session_manager, 
-    file_validator, setup_secure_environment
+    file_validator, setup_secure_environment, is_blacklisted, add_to_blacklist
 )
+from ocr import image_to_text, pdf_to_tables_csv, save_text_as_csv_for_user
+from utils.alerts import send_alert
+import os
 
 # Importar dependências
 try:
@@ -58,45 +61,19 @@ if 'setup_done' not in st.session_state:
     setup_secure_environment()
     st.session_state.setup_done = True
 
-# CSS customizado para melhor aparência
+# CSS customizado para aparência Dark
 st.markdown("""
 <style>
-    .main-container { padding: 2rem; }
-    .dashboard-header { 
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 2rem;
-        border-radius: 10px;
-        margin-bottom: 2rem;
-    }
-    .control-panel {
-        background: #f0f2f6;
-        padding: 1.5rem;
-        border-radius: 10px;
-        margin-bottom: 2rem;
-        border-left: 5px solid #667eea;
-    }
-    .status-badge {
-        display: inline-block;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        font-weight: bold;
-    }
-    .status-active {
-        background-color: #28a745;
-        color: white;
-    }
-    .status-inactive {
-        background-color: #dc3545;
-        color: white;
-    }
-    .security-banner {
-        background: #fff3cd;
-        border-left: 4px solid #ffc107;
-        padding: 1rem;
-        border-radius: 4px;
-        margin-bottom: 1rem;
-    }
+  :root { --bg:#0b1220; --card:#0f1724; --muted:#94a3b8; --accent:#7c3aed; --ok:#22c55e; }
+  .main .block-container{background-color:var(--bg); color:#e6eef8}
+  .dashboard-header{ background: linear-gradient(135deg,#0f1724 0%, #0b1220 100%); color: #e6eef8; padding:1.5rem; border-radius:8px; }
+  .control-panel{ background:var(--card); color:#dbeafe; padding:1rem; border-radius:8px; border-left:4px solid var(--accent); }
+  .status-badge{ display:inline-block; padding:0.4rem 0.8rem; border-radius:16px; font-weight:600 }
+  .status-active{ background:var(--ok); color:#032103 }
+  .status-inactive{ background:#ef4444; color:#2b0505 }
+  .security-banner{ background:#071029; border-left:4px solid #f59e0b; padding:0.8rem; border-radius:6px; margin-bottom:1rem }
+  /* small top-right supporter badge */
+  .supporter-badge{ position:relative; font-size:0.9rem; color:#a3e635; font-weight:600 }
 </style>
 """, unsafe_allow_html=True)
 
@@ -181,6 +158,19 @@ st.markdown("""
 col_user, col_logout = st.columns([9, 1])
 with col_user:
     st.markdown(f"👤 **Usuário:** {st.session_state.username}")
+    # Mostrar badge de apoiador PIX no canto superior do perfil (se configurado)
+    try:
+        meta = credentials.get_user_metadata(st.session_state.username)
+        pix_key = meta.get('pix_key')
+        role = meta.get('role')
+    except Exception:
+        pix_key = None
+        role = 'user'
+    if pix_key:
+        if pix_key == '71281802140':
+            st.markdown("<div class='supporter-badge'>🔑 Apoiador confirmado (PIX)</div>", unsafe_allow_html=True)
+    # armazenar role em session_state para uso posterior
+    st.session_state.user_role = role
 with col_logout:
     if st.button('🚪 Sair', key='btn_logout', use_container_width=True):
         session_manager.destroy_session(session_id)
@@ -346,6 +336,33 @@ if uploaded_file is not None:
                 
             except Exception as e:
                 st.error(f'❌ Erro ao carregar: {str(e)}')
+                # Se falhar na leitura e o usuário for super_admin, oferecer OCR/PDF processing
+                try:
+                    meta = credentials.get_user_metadata(st.session_state.username)
+                    if meta.get('role') == 'super_admin':
+                        st.info('Tentando processamento OCR/PDF para super admin...')
+                        try:
+                            upload_dir = os.path.join('secure_uploads', st.session_state.username)
+                            os.makedirs(upload_dir, exist_ok=True)
+                            csvs = []
+                            try:
+                                uploaded_file.seek(0)
+                                csvs = pdf_to_tables_csv(uploaded_file, upload_dir, prefix=st.session_state.username)
+                            except Exception:
+                                # tentar OCR de imagem para texto simples
+                                try:
+                                    uploaded_file.seek(0)
+                                    txt = image_to_text(uploaded_file)
+                                    path = save_text_as_csv_for_user(st.session_state.username, txt, out_dir='secure_uploads')
+                                    csvs = [path]
+                                except Exception as e2:
+                                    st.error(f'❌ OCR falhou: {e2}')
+                            if csvs:
+                                st.success(f'✅ Conversão concluída: {len(csvs)} arquivos gerados em secure_uploads/{st.session_state.username}')
+                        except Exception as e3:
+                            st.error(f'❌ Erro no processamento OCR: {e3}')
+                except Exception:
+                    pass
     
     with col2:
         if st.button('🧹 Limpar Dados', use_container_width=True, key='btn_clean'):

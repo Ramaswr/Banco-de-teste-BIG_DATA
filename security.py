@@ -37,6 +37,8 @@ class CredentialManager:
     def __init__(self, config_file: str = '.secrets/credentials.json'):
         self.config_file = config_file
         self.credentials = self._load_credentials()
+        # user metadata cache: {username: {'role': ..., 'pix_key': ...}}
+        self.user_meta = self._load_user_metadata()
     
     def _load_credentials(self) -> dict:
         """Carrega credenciais do arquivo de configuração."""
@@ -48,12 +50,20 @@ class CredentialManager:
             logger.warning(f"Erro ao carregar credenciais: {e}")
         
         # Credenciais padrão (MUDE ANTES DE COLOCAR EM PRODUÇÃO)
-        return {
+        # Format: {"users": {"username": {"password": "hash", "role": "user" , "pix_key": "..."}}}
+        default = {
             'users': {
-                'admin': self._hash_password('admin123'),  # MUDE ISTO
-                'usuario': self._hash_password('senha123')   # MUDE ISTO
+                'admin': {
+                    'password': self._hash_password('admin123'),
+                    'role': 'super_admin'
+                },
+                'usuario': {
+                    'password': self._hash_password('senha123'),
+                    'role': 'user'
+                }
             }
         }
+        return default
     
     @staticmethod
     def _hash_password(password: str) -> str:
@@ -82,11 +92,12 @@ class CredentialManager:
     
     def authenticate(self, username: str, password: str) -> bool:
         """Autentica usuário com username e password."""
-        if username not in self.credentials.get('users', {}):
+        user_entry = self.credentials.get('users', {}).get(username)
+        if not user_entry:
             logger.warning(f"Tentativa de login com usuário inexistente: {username}")
             return False
-        
-        stored_hash = self.credentials['users'][username]
+
+        stored_hash = user_entry.get('password') if isinstance(user_entry, dict) else user_entry
         is_valid = self._verify_password(password, stored_hash)
         
         if is_valid:
@@ -95,6 +106,21 @@ class CredentialManager:
             logger.warning(f"Login falhou para: {username}")
         
         return is_valid
+
+    def _load_user_metadata(self) -> dict:
+        meta = {}
+        for u, v in self.credentials.get('users', {}).items():
+            if isinstance(v, dict):
+                meta[u] = {
+                    'role': v.get('role', 'user'),
+                    'pix_key': v.get('pix_key')
+                }
+            else:
+                meta[u] = {'role': 'user', 'pix_key': None}
+        return meta
+
+    def get_user_metadata(self, username: str) -> dict:
+        return self.user_meta.get(username, {'role': 'user', 'pix_key': None})
 
 
 # ==================== VALIDAÇÃO DE ARQUIVOS ====================
@@ -218,6 +244,40 @@ class FileValidator:
         timestamp = int(time.time() * 1000)
         name, ext = os.path.splitext(filename)
         return f"{name}_{timestamp}{ext}"
+
+
+# ==================== BLACKLIST (APLICAÇÃO) ====================
+BLACKLIST_FILE = '.secrets/blacklist.json'
+
+def _ensure_blacklist():
+    try:
+        os.makedirs('.secrets', exist_ok=True)
+        if not os.path.exists(BLACKLIST_FILE):
+            with open(BLACKLIST_FILE, 'w') as f:
+                json.dump({'ips': {}}, f)
+    except Exception as e:
+        logger.warning(f"Erro ao garantir blacklist: {e}")
+
+def is_blacklisted(ip: str) -> bool:
+    _ensure_blacklist()
+    try:
+        with open(BLACKLIST_FILE, 'r') as f:
+            data = json.load(f)
+        return ip in data.get('ips', {})
+    except Exception:
+        return False
+
+def add_to_blacklist(ip: str, reason: str = ''):
+    _ensure_blacklist()
+    try:
+        with open(BLACKLIST_FILE, 'r') as f:
+            data = json.load(f)
+    except Exception:
+        data = {'ips': {}}
+    data['ips'][ip] = {'reason': reason, 'time': int(time.time())}
+    with open(BLACKLIST_FILE, 'w') as f:
+        json.dump(data, f)
+    logger.info(f"IP adicionado à blacklist (aplicação): {ip} - {reason}")
 
 
 # ==================== RATE LIMITING ====================
