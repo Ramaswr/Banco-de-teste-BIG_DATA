@@ -9,23 +9,29 @@ Streamlit app robusto com painel de controle para leitura de múltiplos formatos
 
 import importlib
 import io
-from security import (
-    credentials, rate_limiter, session_manager, 
-    file_validator, setup_secure_environment, is_blacklisted, add_to_blacklist
-)
-from ocr import image_to_text, pdf_to_tables_csv, save_text_as_csv_for_user
-from utils.alerts import send_alert
 import os
+
+import users as user_mgmt
+from ocr import image_to_text, pdf_to_tables_csv, save_text_as_csv_for_user
+from security import (
+    credentials,
+    file_validator,
+    rate_limiter,
+    session_manager,
+    setup_secure_environment,
+)
 
 # Importar dependências
 try:
     st = importlib.import_module("streamlit")
-except:
-    raise ModuleNotFoundError("streamlit não encontrado. Instale: pip install streamlit")
+except Exception:
+    raise ModuleNotFoundError(
+        "streamlit não encontrado. Instale: pip install streamlit"
+    )
 
 try:
     pd = importlib.import_module("pandas")
-except:
+except Exception:
     raise ModuleNotFoundError("pandas não encontrado. Instale: pip install pandas")
 
 # numpy é opcional e não é usado diretamente neste arquivo; definir como None evita erros
@@ -33,36 +39,41 @@ np = None
 
 try:
     import matplotlib.pyplot as plt
-except:
+except Exception:
     plt = None
 
 try:
-    from etl import read_sales_csv, clean_product_df, clean_date_df, aggregate_and_save
-except:
+    from etl import aggregate_and_save, clean_date_df, clean_product_df, read_sales_csv
+except Exception:
     # Fallbacks
-    def read_sales_csv(file_obj, sep=','):
+    def read_sales_csv(file_obj, sep=","):
         return pd.read_csv(file_obj, sep=sep)
+
     def clean_product_df(df):
         return df
+
     def clean_date_df(df):
         return df
-    def aggregate_and_save(df_prod=None, df_date=None, output_folder='streamlit_output', save_prefix=''):
+
+    def aggregate_and_save(
+        df_prod=None, df_date=None, output_folder="streamlit_output", save_prefix=""
+    ):
         return [], {}
+
 
 # ==================== CONFIGURAÇÃO ====================
 st.set_page_config(
-    page_title='📊 Jerr_BIG-DATE',
-    layout='wide',
-    initial_sidebar_state='expanded'
+    page_title="📊 Jerr_BIG-DATE", layout="wide", initial_sidebar_state="expanded"
 )
 
 # Configurar ambiente seguro na primeira execução
-if 'setup_done' not in st.session_state:
+if "setup_done" not in st.session_state:
     setup_secure_environment()
     st.session_state.setup_done = True
 
 # CSS customizado para aparência Dark
-st.markdown("""
+st.markdown(
+    """
 <style>
   :root { --bg:#0b1220; --card:#0f1724; --muted:#94a3b8; --accent:#7c3aed; --ok:#22c55e; }
   .main .block-container{background-color:var(--bg); color:#e6eef8}
@@ -75,33 +86,39 @@ st.markdown("""
   /* small top-right supporter badge */
   .supporter-badge{ position:relative; font-size:0.9rem; color:#a3e635; font-weight:600 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
+
 
 # ==================== AUTENTICAÇÃO ====================
 def login_page():
     """Página de login segura."""
-    st.markdown("""
+    st.markdown(
+        """
     <div class='dashboard-header'>
         <h1>🔐 Jerr_BIG-DATE - Login</h1>
         <p>Acesso seguro e protegido ao Jerr_BIG-DATE</p>
     </div>
-    """, unsafe_allow_html=True)
-    
+    """,
+        unsafe_allow_html=True,
+    )
+
     col1, col2, col3 = st.columns([1, 2, 1])
-    
+
     with col2:
         st.markdown("### Credenciais de Acesso")
-        
-        username = st.text_input('👤 Usuário', key='login_user')
-        password = st.text_input('🔑 Senha', type='password', key='login_pass')
-        
+
+        username = st.text_input("👤 Usuário", key="login_user")
+        password = st.text_input("🔑 Senha", type="password", key="login_pass")
+
         # Rate limiting por IP (usando session como proxy)
-        session_id = st.session_state.get('session_id', 'guest')
+        session_id = st.session_state.get("session_id", "guest")
         if not rate_limiter.is_allowed(session_id):
-            st.error('❌ Muitas tentativas de login. Tente novamente mais tarde.')
+            st.error("❌ Muitas tentativas de login. Tente novamente mais tarde.")
             st.stop()
-        
-        if st.button('🔓 Entrar', use_container_width=True, key='btn_login'):
+
+        if st.button("🔓 Entrar", use_container_width=True, key="btn_login"):
             if username and password:
                 if credentials.authenticate(username, password):
                     # Criar sessão
@@ -109,28 +126,66 @@ def login_page():
                     st.session_state.session_id = session_id
                     st.session_state.authenticated = True
                     st.session_state.username = username
-                    st.success(f'Sejam bem-vindo a Jerr_BIG-DATE, {username}!')
+                    st.success(f"Sejam bem-vindo a Jerr_BIG-DATE, {username}!")
                     st.rerun()
                 else:
-                    st.error('❌ Usuário ou senha incorretos')
+                    st.error("❌ Usuário ou senha incorretos")
                     rate_limiter.is_allowed(session_id)  # Contar tentativa falha
             else:
-                st.warning('⚠️ Preencha usuário e senha')
-    
-    st.markdown('---')
-    st.info('**Demo Credentials:**\n- Username: `admin` | Password: `admin123`\n- Username: `usuario` | Password: `senha123`\n\n⚠️ **ALTERE ESTAS CREDENCIAIS EM PRODUÇÃO!**')
-    st.markdown('🔒 Todos os acessos são registrados em `security.log`')
+                st.warning("⚠️ Preencha usuário e senha")
+
+    # ---------- Formulário de Registro (simples, amigável) ----------
+    with st.expander("Criar nova conta", expanded=False):
+        st.info(
+            "Crie uma conta local — os dados ficam armazenados localmente em `.secrets/users.db`"
+        )
+        r_username = st.text_input("Nome de usuário", key="reg_user")
+        r_name = st.text_input("Nome completo (opcional)", key="reg_name")
+        r_email = st.text_input("Email (opcional)", key="reg_email")
+        r_phone = st.text_input("Telefone (opcional)", key="reg_phone")
+        r_password = st.text_input("Senha", type="password", key="reg_pass")
+        r_password2 = st.text_input(
+            "Confirme a senha", type="password", key="reg_pass2"
+        )
+        r_role = st.selectbox(
+            "Tipo de conta", ["user", "super_admin"], index=0, key="reg_role"
+        )
+        if st.button("Criar conta", key="btn_create_account"):
+            if not r_username or not r_password:
+                st.error("Usuário e senha são obrigatórios")
+            elif r_password != r_password2:
+                st.error("As senhas não coincidem")
+            else:
+                try:
+                    user_mgmt.create_user(
+                        username=r_username,
+                        password=r_password,
+                        name=r_name or None,
+                        email=r_email or None,
+                        phone=r_phone or None,
+                        role=r_role,
+                    )
+                    st.success("Conta criada com sucesso! Faça login.")
+                except Exception as e:
+                    st.error(f"Erro ao criar conta: {e}")
+
+    st.markdown("---")
+    st.info(
+        "**Demo Credentials:**\n- Username: `admin` | Password: `admin123`\n- Username: `usuario` | Password: `senha123`\n\n⚠️ **ALTERE ESTAS CREDENCIAIS EM PRODUÇÃO!**"
+    )
+    st.markdown("🔒 Todos os acessos são registrados em `security.log`")
+
 
 # ==================== ESTADO DO APP ====================
-if 'app_active' not in st.session_state:
+if "app_active" not in st.session_state:
     st.session_state.app_active = True
-if 'current_df' not in st.session_state:
+if "current_df" not in st.session_state:
     st.session_state.current_df = None
-if 'file_info' not in st.session_state:
+if "file_info" not in st.session_state:
     st.session_state.file_info = {}
-if 'authenticated' not in st.session_state:
+if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
-if 'username' not in st.session_state:
+if "username" not in st.session_state:
     st.session_state.username = None
 
 # ==================== VERIFICAÇÃO DE AUTENTICAÇÃO ====================
@@ -142,17 +197,20 @@ if not st.session_state.authenticated:
 session_id = st.session_state.session_id
 username = session_manager.validate_session(session_id)
 if not username:
-    st.error('❌ Sessão expirada. Faça login novamente.')
+    st.error("❌ Sessão expirada. Faça login novamente.")
     st.session_state.authenticated = False
     st.rerun()
 
 # ==================== CABEÇALHO ====================
-st.markdown("""
+st.markdown(
+    """
 <div class='dashboard-header'>
     <h1>📊 Painel de Análise de Dados</h1>
     <p>Ferramenta robusta para leitura, limpeza e análise de arquivos (CSV, Excel, Parquet)</p>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # Mostrar usuário logado
 col_user, col_logout = st.columns([9, 1])
@@ -161,29 +219,35 @@ with col_user:
     # Mostrar badge de apoiador PIX no canto superior do perfil (se configurado)
     try:
         meta = credentials.get_user_metadata(st.session_state.username)
-        pix_key = meta.get('pix_key')
-        role = meta.get('role')
+        pix_key = meta.get("pix_key")
+        role = meta.get("role")
     except Exception:
         pix_key = None
-        role = 'user'
+        role = "user"
     if pix_key:
-        if pix_key == '71281802140':
-            st.markdown("<div class='supporter-badge'>🔑 Apoiador confirmado (PIX)</div>", unsafe_allow_html=True)
+        if pix_key == "71281802140":
+            st.markdown(
+                "<div class='supporter-badge'>🔑 Apoiador confirmado (PIX)</div>",
+                unsafe_allow_html=True,
+            )
     # armazenar role em session_state para uso posterior
     st.session_state.user_role = role
 with col_logout:
-    if st.button('🚪 Sair', key='btn_logout', use_container_width=True):
+    if st.button("🚪 Sair", key="btn_logout", use_container_width=True):
         session_manager.destroy_session(session_id)
         st.session_state.authenticated = False
         st.session_state.username = None
-        st.success('Logout realizado com sucesso!')
+        st.success("Logout realizado com sucesso!")
         st.rerun()
 
-st.markdown("""
+st.markdown(
+    """
 <div class='security-banner'>
     <strong>🔒 Segurança Ativa:</strong> Autenticação habilitada | Validação de arquivos | Rate limiting | Logging de acessos
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ==================== PAINEL DE CONTROLE ====================
 st.markdown("<div class='control-panel'>", unsafe_allow_html=True)
@@ -193,18 +257,21 @@ col_status, col_btn_start, col_btn_stop = st.columns([2, 1, 1])
 with col_status:
     status_class = "status-active" if st.session_state.app_active else "status-inactive"
     status_text = "🟢 ATIVO" if st.session_state.app_active else "🔴 INATIVO"
-    st.markdown(f"<span class='status-badge {status_class}'>{status_text}</span>", unsafe_allow_html=True)
+    st.markdown(
+        f"<span class='status-badge {status_class}'>{status_text}</span>",
+        unsafe_allow_html=True,
+    )
 
 with col_btn_start:
-    if st.button('▶️ INICIAR', key='btn_start', use_container_width=True):
+    if st.button("▶️ INICIAR", key="btn_start", use_container_width=True):
         st.session_state.app_active = True
-        st.success('✅ Aplicação iniciada!')
+        st.success("✅ Aplicação iniciada!")
         st.rerun()
 
 with col_btn_stop:
-    if st.button('⏹️ DESLIGAR', key='btn_stop', use_container_width=True):
+    if st.button("⏹️ DESLIGAR", key="btn_stop", use_container_width=True):
         st.session_state.app_active = False
-        st.warning('🛑 Aplicação desligada!')
+        st.warning("🛑 Aplicação desligada!")
         st.rerun()
 
 st.markdown("</div>", unsafe_allow_html=True)
@@ -215,50 +282,46 @@ if not st.session_state.app_active:
     st.stop()
 
 # ==================== BARRA LATERAL - CONFIGURAÇÕES ====================
-st.sidebar.title('⚙️ Configurações')
+st.sidebar.title("⚙️ Configurações")
 
 file_format = st.sidebar.selectbox(
-    'Formato do arquivo',
-    ['CSV', 'Excel (.xlsx/.xls)', 'Parquet (.parquet)', 'Texto (.txt)'],
-    key='file_format'
+    "Formato do arquivo",
+    ["CSV", "Excel (.xlsx/.xls)", "Parquet (.parquet)", "Texto (.txt)"],
+    key="file_format",
 )
 
 separator = st.sidebar.selectbox(
-    'Separador de coluna (CSV/TXT)',
-    [';', ',', '\t', '|'],
-    index=0,
-    key='separator'
+    "Separador de coluna (CSV/TXT)", [";", ",", "\t", "|"], index=0, key="separator"
 )
 
 encoding = st.sidebar.selectbox(
-    'Codificação',
-    ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1'],
-    index=0,
-    key='encoding'
+    "Codificação", ["utf-8", "latin-1", "cp1252", "iso-8859-1"], index=0, key="encoding"
 )
 
-st.sidebar.markdown('---')
-st.sidebar.markdown('**📌 Sobre:**')
-st.sidebar.info('Painel robusto para análise de dados com suporte a múltiplos formatos e processamento ETL.')
+st.sidebar.markdown("---")
+st.sidebar.markdown("**📌 Sobre:**")
+st.sidebar.info(
+    "Painel robusto para análise de dados com suporte a múltiplos formatos e processamento ETL."
+)
 
 # ==================== SEÇÃO PRINCIPAL ====================
-st.markdown('## 📁 Carregar Arquivo')
+st.markdown("## 📁 Carregar Arquivo")
 
 # Mapa de tipos de arquivo
 file_type_map = {
-    'CSV': ['csv', 'txt'],
-    'Excel (.xlsx/.xls)': ['xlsx', 'xls'],
-    'Parquet (.parquet)': ['parquet'],
-    'Texto (.txt)': ['txt']
+    "CSV": ["csv", "txt"],
+    "Excel (.xlsx/.xls)": ["xlsx", "xls"],
+    "Parquet (.parquet)": ["parquet"],
+    "Texto (.txt)": ["txt"],
 }
 
-allowed_types = file_type_map.get(file_format, ['csv'])
+allowed_types = file_type_map.get(file_format, ["csv"])
 
 # Upload
 uploaded_file = st.file_uploader(
     f'Selecione um arquivo ({", ".join(allowed_types)})',
     type=allowed_types,
-    key='file_upload'
+    key="file_upload",
 )
 
 # Limite estrito do cliente (defesa em profundidade)
@@ -270,9 +333,9 @@ if uploaded_file is not None:
     # Checagem rápida do tamanho (client-side validation)
     try:
         # Alguns file-like objects expõem getbuffer/getvalue
-        if hasattr(uploaded_file, 'getbuffer'):
+        if hasattr(uploaded_file, "getbuffer"):
             size_bytes = len(uploaded_file.getbuffer())
-        elif hasattr(uploaded_file, 'getvalue'):
+        elif hasattr(uploaded_file, "getvalue"):
             size_bytes = len(uploaded_file.getvalue())
         else:
             # fallback: seek/tell
@@ -294,212 +357,239 @@ if uploaded_file is not None:
         size_bytes = None
 
     if size_bytes is not None and size_bytes > MAX_BYTES:
-        st.error('❌ Arquivo maior que 10 MB. Por favor envie arquivos menores ou utilize o fluxo de upload para datasets grandes (presigned upload).')
+        st.error(
+            "❌ Arquivo maior que 10 MB. Por favor envie arquivos menores ou utilize o fluxo de upload para datasets grandes (presigned upload)."
+        )
         st.stop()
 
     # Validar arquivo com rotina de segurança
     is_valid, result = file_validator.validate_file(uploaded_file, uploaded_file.name)
-    
+
     if not is_valid:
-        st.error(f'❌ Arquivo rejeitado: {result}')
+        st.error(f"❌ Arquivo rejeitado: {result}")
         st.stop()
-    
+
     safe_filename = result
-    st.success(f'✅ Arquivo validado: {safe_filename}')
-    
+    st.success(f"✅ Arquivo validado: {safe_filename}")
+
     col1, col2, col3 = st.columns(3)
-    
+
     with col1:
-        if st.button('🔄 Carregar e Visualizar', use_container_width=True, key='btn_load'):
+        if st.button(
+            "🔄 Carregar e Visualizar", use_container_width=True, key="btn_load"
+        ):
             try:
-                st.info('Carregando arquivo...')
-                
+                st.info("Carregando arquivo...")
+
                 # Detectar formato e carregar
-                if file_format == 'CSV':
+                if file_format == "CSV":
                     df = pd.read_csv(uploaded_file, sep=separator, encoding=encoding)
-                elif file_format == 'Excel (.xlsx/.xls)':
+                elif file_format == "Excel (.xlsx/.xls)":
                     df = pd.read_excel(uploaded_file)
-                elif file_format == 'Parquet (.parquet)':
+                elif file_format == "Parquet (.parquet)":
                     df = pd.read_parquet(uploaded_file)
                 else:  # Texto
                     df = pd.read_csv(uploaded_file, sep=separator, encoding=encoding)
-                
+
                 st.session_state.current_df = df
                 st.session_state.file_info = {
-                    'name': uploaded_file.name,
-                    'size': len(df),
-                    'columns': len(df.columns),
-                    'format': file_format
+                    "name": uploaded_file.name,
+                    "size": len(df),
+                    "columns": len(df.columns),
+                    "format": file_format,
                 }
-                
-                st.success('✅ Arquivo carregado com sucesso!')
-                
+
+                st.success("✅ Arquivo carregado com sucesso!")
+
             except Exception as e:
-                st.error(f'❌ Erro ao carregar: {str(e)}')
+                st.error(f"❌ Erro ao carregar: {str(e)}")
                 # Se falhar na leitura e o usuário for super_admin, oferecer OCR/PDF processing
                 try:
                     meta = credentials.get_user_metadata(st.session_state.username)
-                    if meta.get('role') == 'super_admin':
-                        st.info('Tentando processamento OCR/PDF para super admin...')
+                    if meta.get("role") == "super_admin":
+                        st.info("Tentando processamento OCR/PDF para super admin...")
                         try:
-                            upload_dir = os.path.join('secure_uploads', st.session_state.username)
+                            upload_dir = os.path.join(
+                                "secure_uploads", st.session_state.username
+                            )
                             os.makedirs(upload_dir, exist_ok=True)
                             csvs = []
                             try:
                                 uploaded_file.seek(0)
-                                csvs = pdf_to_tables_csv(uploaded_file, upload_dir, prefix=st.session_state.username)
+                                csvs = pdf_to_tables_csv(
+                                    uploaded_file,
+                                    upload_dir,
+                                    prefix=st.session_state.username,
+                                )
                             except Exception:
                                 # tentar OCR de imagem para texto simples
                                 try:
                                     uploaded_file.seek(0)
                                     txt = image_to_text(uploaded_file)
-                                    path = save_text_as_csv_for_user(st.session_state.username, txt, out_dir='secure_uploads')
+                                    path = save_text_as_csv_for_user(
+                                        st.session_state.username,
+                                        txt,
+                                        out_dir="secure_uploads",
+                                    )
                                     csvs = [path]
                                 except Exception as e2:
-                                    st.error(f'❌ OCR falhou: {e2}')
+                                    st.error(f"❌ OCR falhou: {e2}")
                             if csvs:
-                                st.success(f'✅ Conversão concluída: {len(csvs)} arquivos gerados em secure_uploads/{st.session_state.username}')
+                                st.success(
+                                    f"✅ Conversão concluída: {len(csvs)} arquivos gerados em secure_uploads/{st.session_state.username}"
+                                )
                         except Exception as e3:
-                            st.error(f'❌ Erro no processamento OCR: {e3}')
+                            st.error(f"❌ Erro no processamento OCR: {e3}")
                 except Exception:
                     pass
-    
+
     with col2:
-        if st.button('🧹 Limpar Dados', use_container_width=True, key='btn_clean'):
+        if st.button("🧹 Limpar Dados", use_container_width=True, key="btn_clean"):
             if st.session_state.current_df is not None:
                 try:
                     df = st.session_state.current_df.copy()
-                    
+
                     # Limpeza básica
-                    df = df.dropna(how='all')  # Remove linhas completamente vazias
-                    df = df.fillna('')  # Preenche NaN com strings vazias
-                    
+                    df = df.dropna(how="all")  # Remove linhas completamente vazias
+                    df = df.fillna("")  # Preenche NaN com strings vazias
+
                     st.session_state.current_df = df
-                    st.success('✅ Dados limpos!')
+                    st.success("✅ Dados limpos!")
                 except Exception as e:
-                    st.error(f'❌ Erro na limpeza: {str(e)}')
+                    st.error(f"❌ Erro na limpeza: {str(e)}")
             else:
-                st.warning('⚠️ Carregue um arquivo primeiro.')
-    
+                st.warning("⚠️ Carregue um arquivo primeiro.")
+
     with col3:
-        if st.button('📊 Análise Rápida', use_container_width=True, key='btn_analyze'):
+        if st.button("📊 Análise Rápida", use_container_width=True, key="btn_analyze"):
             if st.session_state.current_df is not None:
-                st.write('**Análise do conjunto de dados:**')
+                st.write("**Análise do conjunto de dados:**")
                 st.write(st.session_state.current_df.describe())
             else:
-                st.warning('⚠️ Carregue um arquivo primeiro.')
+                st.warning("⚠️ Carregue um arquivo primeiro.")
 
 # ==================== PREVIEW E DETALHES ====================
 if st.session_state.current_df is not None:
-    st.markdown('---')
-    st.markdown('## 📋 Visualização de Dados')
-    
+    st.markdown("---")
+    st.markdown("## 📋 Visualização de Dados")
+
     # Informações do arquivo
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric('Linhas', st.session_state.file_info.get('size', 0))
+        st.metric("Linhas", st.session_state.file_info.get("size", 0))
     with col2:
-        st.metric('Colunas', st.session_state.file_info.get('columns', 0))
+        st.metric("Colunas", st.session_state.file_info.get("columns", 0))
     with col3:
-        st.metric('Formato', st.session_state.file_info.get('format', 'N/A'))
+        st.metric("Formato", st.session_state.file_info.get("format", "N/A"))
     with col4:
-        st.metric('Arquivo', st.session_state.file_info.get('name', 'N/A')[:20] + '...')
-    
+        st.metric("Arquivo", st.session_state.file_info.get("name", "N/A")[:20] + "...")
+
     # Tabs para diferentes visualizações
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(['📊 Dados', '📈 Estatísticas', '🔍 Info', '💾 Exportar', 'ETL'])
-    
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
+        ["📊 Dados", "📈 Estatísticas", "🔍 Info", "💾 Exportar", "ETL"]
+    )
+
     with tab1:
-        st.markdown('### Primeiras linhas')
-        rows_to_show = st.slider('Número de linhas', 5, 100, 10)
-        st.dataframe(st.session_state.current_df.head(rows_to_show), use_container_width=True)
-    
+        st.markdown("### Primeiras linhas")
+        rows_to_show = st.slider("Número de linhas", 5, 100, 10)
+        st.dataframe(
+            st.session_state.current_df.head(rows_to_show), use_container_width=True
+        )
+
     with tab2:
-        st.markdown('### Estatísticas descritivas')
+        st.markdown("### Estatísticas descritivas")
         st.dataframe(st.session_state.current_df.describe(), use_container_width=True)
-    
+
     with tab3:
-        st.markdown('### Informações do dataset')
+        st.markdown("### Informações do dataset")
         col_left, col_right = st.columns(2)
         with col_left:
-            st.write(f'**Tipo de dados:**')
+            st.write("**Tipo de dados:**")
             st.write(st.session_state.current_df.dtypes)
         with col_right:
-            st.write(f'**Valores nulos:**')
+            st.write("**Valores nulos:**")
             st.write(st.session_state.current_df.isnull().sum())
-    
+
     with tab4:
-        st.markdown('### Exportar dados')
+        st.markdown("### Exportar dados")
         col_csv, col_excel, col_parquet = st.columns(3)
-        
+
         with col_csv:
-            csv_buffer = st.session_state.current_df.to_csv(index=False).encode('utf-8')
+            csv_buffer = st.session_state.current_df.to_csv(index=False).encode("utf-8")
             st.download_button(
-                '📥 CSV',
+                "📥 CSV",
                 data=csv_buffer,
                 file_name=f'dados_{st.session_state.file_info.get("name", "export")}.csv',
-                mime='text/csv',
-                use_container_width=True
+                mime="text/csv",
+                use_container_width=True,
             )
-        
+
         with col_excel:
             buffer = io.BytesIO()
             st.session_state.current_df.to_excel(buffer, index=False)
             buffer.seek(0)
             st.download_button(
-                '📥 Excel',
+                "📥 Excel",
                 data=buffer,
                 file_name=f'dados_{st.session_state.file_info.get("name", "export")}.xlsx',
-                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                use_container_width=True
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
             )
-        
+
         with col_parquet:
             parquet_buffer = io.BytesIO()
             st.session_state.current_df.to_parquet(parquet_buffer, index=False)
             parquet_buffer.seek(0)
             st.download_button(
-                '📥 Parquet',
+                "📥 Parquet",
                 data=parquet_buffer,
                 file_name=f'dados_{st.session_state.file_info.get("name", "export")}.parquet',
-                mime='application/octet-stream',
-                use_container_width=True
+                mime="application/octet-stream",
+                use_container_width=True,
             )
-    
+
     with tab5:
-        st.markdown('### Processamento ETL')
-        st.info('Execute a limpeza e agregação de dados de vendas (produto/data)')
-        
+        st.markdown("### Processamento ETL")
+        st.info("Execute a limpeza e agregação de dados de vendas (produto/data)")
+
         col_etl1, col_etl2 = st.columns(2)
-        
+
         with col_etl1:
-            if st.button('🔄 Aplicar ETL - Limpeza', use_container_width=True):
+            if st.button("🔄 Aplicar ETL - Limpeza", use_container_width=True):
                 try:
                     df_cleaned = clean_product_df(st.session_state.current_df.copy())
                     st.session_state.current_df = df_cleaned
-                    st.success('✅ Limpeza ETL aplicada!')
+                    st.success("✅ Limpeza ETL aplicada!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f'❌ Erro no ETL: {str(e)}')
-        
+                    st.error(f"❌ Erro no ETL: {str(e)}")
+
         with col_etl2:
-            if st.button('📊 Aplicar ETL - Agregação', use_container_width=True):
+            if st.button("📊 Aplicar ETL - Agregação", use_container_width=True):
                 try:
                     out_paths, reports = aggregate_and_save(
                         df_prod=st.session_state.current_df.copy(),
-                        output_folder='streamlit_output'
+                        output_folder="streamlit_output",
                     )
-                    st.success('✅ Agregação concluída!')
+                    st.success("✅ Agregação concluída!")
                     if reports:
                         for key, val in reports.items():
-                            st.write(f'**{key}**: {len(val)} registros')
+                            st.write(f"**{key}**: {len(val)} registros")
                 except Exception as e:
-                    st.error(f'❌ Erro na agregação: {str(e)}')
+                    st.error(f"❌ Erro na agregação: {str(e)}")
 
-st.markdown('---')
-st.markdown('**🔒 Privacidade:** Todos os dados são processados localmente. Nenhum arquivo é enviado para servidores remotos.')
-st.markdown('**📧 Suporte:** Desenvolvido com ❤️ para análise segura e independente de dados.')
-st.markdown('**📋 Logs de Segurança:** Verifique `security.log` para auditoria de acessos.')
-st.markdown("""
+st.markdown("---")
+st.markdown(
+    "**🔒 Privacidade:** Todos os dados são processados localmente. Nenhum arquivo é enviado para servidores remotos."
+)
+st.markdown(
+    "**📧 Suporte:** Desenvolvido com ❤️ para análise segura e independente de dados."
+)
+st.markdown(
+    "**📋 Logs de Segurança:** Verifique `security.log` para auditoria de acessos."
+)
+st.markdown(
+    """
 ---
 ## 🛡️ Medidas de Segurança Implementadas:
 
@@ -516,61 +606,7 @@ st.markdown("""
 - Configure `.secrets/credentials.json` para produção
 - Use HTTPS em produção (não HTTP)
 - Configure firewall adequado
-""")
+"""
+)
 
-#!/usr/bin/env python3
-import requests
-import os
-import time
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-
-# Preferir carregar a partir de .secrets/duckdns.env ou variáveis de ambiente
-ENV_PATH = os.path.expanduser("~/.secrets/duckdns.env")
-DOMAINS = os.getenv("DUCKDNS_DOMAINS")
-TOKEN = os.getenv("DUCKDNS_TOKEN")
-
-if not (DOMAINS and TOKEN) and os.path.exists(ENV_PATH):
-    with open(ENV_PATH, "r") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            k, _, v = line.partition("=")
-            if k == "DOMAIN" and not DOMAINS:
-                DOMAINS = v.strip()
-            if k == "TOKEN" and not TOKEN:
-                TOKEN = v.strip()
-
-if not (DOMAINS and TOKEN):
-    raise SystemExit("DUCKDNS_DOMAINS e DUCKDNS_TOKEN não configurados.")
-
-log_dir = os.path.expanduser("~/duckdns_py")
-os.makedirs(log_dir, exist_ok=True)
-log_path = os.path.join(log_dir, "duck.log")
-
-# criar session com retries
-session = requests.Session()
-retries = Retry(total=3, backoff_factor=1, status_forcelist=(500,502,503,504))
-session.mount("https://", HTTPAdapter(max_retries=retries))
-
-def update_duckdns():
-    url = f"https://www.duckdns.org/update?domains={DOMAINS}&token={TOKEN}"
-    try:
-        resp = session.get(url, timeout=10)
-        body = resp.text.strip()
-        now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
-        with open(log_path, "a") as log_file:
-            log_file.write(f"{now} - {body} (status {resp.status_code})\\n")
-
-        print(f"Update response: {body}")
-        return body, resp.status_code
-    except requests.RequestException as e:
-        now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
-        with open(log_path, "a") as log_file:
-            log_file.write(f"{now} - ERROR - {e}\\n")
-        print(f"Erro na requisição: {e}")
-        return None, None
-
-if __name__ == "__main__":
-    update_duckdns()
+# deploy utilities (DuckDNS updater moved to deploy/duckdns/duckdns_updater.py)

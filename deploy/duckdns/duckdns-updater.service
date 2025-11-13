@@ -1,0 +1,12 @@
+[Unit]
+Description=DuckDNS updater (oneshot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash "/home/jerr/Downloads/Projeto extencionista BIG_DATA/deploy/duckdns/duckdns-updater.sh"
+
+
+[Install]
+WantedBy=multi-user.target

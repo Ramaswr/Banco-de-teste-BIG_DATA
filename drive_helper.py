@@ -6,8 +6,9 @@ Não contém credenciais; configure em `.secrets/drive.env`.
 # Placeholder: use google-auth and googleapiclient for implementação real
 # pip install google-auth google-auth-oauthlib google-api-python-client
 
-import os
 
 def upload_file_to_drive(file_path, folder_id=None, creds=None):
     """Placeholder: faça upload usando as credenciais OAuth e retorne file id."""
-    raise NotImplementedError('Configure Google Drive API e implemente upload com googleapiclient')
+    raise NotImplementedError(
+        "Configure Google Drive API e implemente upload com googleapiclient"
+    )

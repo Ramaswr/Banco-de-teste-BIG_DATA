@@ -8,21 +8,23 @@ Streamlit app para upload dos CSVs e execução do ETL.
 try:
     import importlib
     import importlib.util
-    import types
     import sys
+    import types
 
     # Se pandas não estiver instalado, insere um stub mínimo em sys.modules
     if importlib.util.find_spec("pandas") is None:
         mod = types.ModuleType("pandas")
+
         def _missing(*a, **k):
             raise ModuleNotFoundError(
                 "pandas não encontrado. Instale via 'pip install pandas' para executar o ETL."
             )
+
         # funções/objetos usados no app -> lançam erro informativo ao serem chamados
         mod.read_csv = _missing
         mod.DataFrame = type("DataFrameStub", (), {})  # placeholder leve
         mod.__getattr__ = lambda name: _missing()
-        sys.modules['pandas'] = mod
+        sys.modules["pandas"] = mod
 
     # Importa streamlit (se não existir, gera exceção para cair no except e usar o stub de UI)
     if importlib.util.find_spec("streamlit") is None:
@@ -36,39 +38,53 @@ except Exception:
     class _Column:
         def __enter__(self):
             return self
+
         def __exit__(self, exc_type, exc, tb):
             return False
 
     class _Stub:
         def set_page_config(self, *a, **k):
             pass
+
         def title(self, *a, **k):
             pass
+
         def markdown(self, *a, **k):
             pass
+
         def columns(self, n):
             return tuple(_Column() for _ in range(n))
+
         def file_uploader(self, *a, **k):
             return None
+
         def selectbox(self, label, options, index=0, key=None):
             try:
                 return options[index]
             except Exception:
                 return options[0] if options else None
+
         def button(self, *a, **k):
             return False
+
         def warning(self, *a, **k):
             pass
+
         def info(self, *a, **k):
             pass
+
         def subheader(self, *a, **k):
             pass
+
         def dataframe(self, *a, **k):
             pass
+
         def success(self, *a, **k):
             pass
+
         def download_button(self, *a, **k):
             pass
+
         def error(self, *a, **k):
             pass
 
@@ -76,18 +92,27 @@ except Exception:
 
 try:
     import importlib
+
     try:
         pd = importlib.import_module("pandas")
     except Exception:
         pd = None
 
     try:
-        from etl import run_etl, read_sales_csv, clean_product_df, clean_date_df, aggregate_and_save
+        from etl import (
+            aggregate_and_save,
+            clean_date_df,
+            clean_product_df,
+            read_sales_csv,
+            run_etl,
+        )
     except Exception:
         # Minimal fallbacks so the app can be analyzed/inspected without the etl module.
-        def read_sales_csv(file_obj, sep=','):
+        def read_sales_csv(file_obj, sep=","):
             if pd is None:
-                raise ModuleNotFoundError("pandas não encontrado. Instale via 'pip install pandas' para executar o ETL.")
+                raise ModuleNotFoundError(
+                    "pandas não encontrado. Instale via 'pip install pandas' para executar o ETL."
+                )
             return pd.read_csv(file_obj, sep=sep)
 
         def run_etl(*args, **kwargs):
@@ -99,83 +124,124 @@ try:
         def clean_date_df(df):
             return df
 
-        def aggregate_and_save(df_prod=None, df_date=None, output_folder='streamlit_output', save_prefix=''):
+        def aggregate_and_save(
+            df_prod=None, df_date=None, output_folder="streamlit_output", save_prefix=""
+        ):
             # Retorna estrutura vazia compatível com o restante do app
             return [], {}
+
 except Exception:
     # Em caso de erro inesperado, garantir que variáveis existam
     pd = None
-    def read_sales_csv(file_obj, sep=','):
+
+    def read_sales_csv(file_obj, sep=","):
         raise ModuleNotFoundError("pandas não disponível")
+
     def run_etl(*args, **kwargs):
         raise ModuleNotFoundError("etl não disponível")
+
     def clean_product_df(df):
         return df
+
     def clean_date_df(df):
         return df
-    def aggregate_and_save(df_prod=None, df_date=None, output_folder='streamlit_output', save_prefix=''):
+
+    def aggregate_and_save(
+        df_prod=None, df_date=None, output_folder="streamlit_output", save_prefix=""
+    ):
         return [], {}
 
-st.set_page_config(page_title='ETL Vendas - Análise', layout='wide')
 
-st.title('ETL de Vendas — Upload e Análise')
+st.set_page_config(page_title="ETL Vendas - Análise", layout="wide")
 
-st.markdown('Carregue os arquivos CSV (produto e/ou data). O aplicativo limpará, agregará e permitirá baixar os resultados em CSV (padrão UTF-8, separador ,).')
+st.title("ETL de Vendas — Upload e Análise")
+
+st.markdown(
+    "Carregue os arquivos CSV (produto e/ou data). O aplicativo limpará, agregará e permitirá baixar os resultados em CSV (padrão UTF-8, separador ,)."
+)
 
 col1, col2 = st.columns(2)
 
 with col1:
-    prod_file = st.file_uploader('CSV - Vendas por Produto (Categoria, Codigo, Produto, Quantidade, Valor)', type=['csv','txt'], key='prod')
-    sep_prod = st.selectbox('Separador (produto)', [';', ','], index=0, key='sep_prod')
+    prod_file = st.file_uploader(
+        "CSV - Vendas por Produto (Categoria, Codigo, Produto, Quantidade, Valor)",
+        type=["csv", "txt"],
+        key="prod",
+    )
+    sep_prod = st.selectbox("Separador (produto)", [";", ","], index=0, key="sep_prod")
 with col2:
-    date_file = st.file_uploader('CSV - Vendas por Data', type=['csv','txt'], key='date')
-    sep_date = st.selectbox('Separador (data)', [';', ','], index=0, key='sep_date')
+    date_file = st.file_uploader(
+        "CSV - Vendas por Data", type=["csv", "txt"], key="date"
+    )
+    sep_date = st.selectbox("Separador (data)", [";", ","], index=0, key="sep_date")
 
-output_folder = 'streamlit_output'
+output_folder = "streamlit_output"
 
-if st.button('Rodar ETL'):
+if st.button("Rodar ETL"):
     if not prod_file and not date_file:
-        st.warning('Faça upload de pelo menos um dos arquivos (produto ou data).')
+        st.warning("Faça upload de pelo menos um dos arquivos (produto ou data).")
     else:
-        st.info('Processando...')
+        st.info("Processando...")
         prod_df = None
         date_df = None
         try:
             if prod_file:
                 prod_df_raw = read_sales_csv(prod_file, sep=sep_prod)
                 prod_df = clean_product_df(prod_df_raw)
-                st.subheader('Preview - produto (limpo)')
+                st.subheader("Preview - produto (limpo)")
                 st.dataframe(prod_df.head(50))
             if date_file:
                 date_df_raw = read_sales_csv(date_file, sep=sep_date)
                 date_df = clean_date_df(date_df_raw)
-                st.subheader('Preview - data (limpo)')
+                st.subheader("Preview - data (limpo)")
                 st.dataframe(date_df.head(50))
 
-            out_paths, reports = aggregate_and_save(df_prod=prod_df, df_date=date_df, output_folder=output_folder, save_prefix='')
+            out_paths, reports = aggregate_and_save(
+                df_prod=prod_df,
+                df_date=date_df,
+                output_folder=output_folder,
+                save_prefix="",
+            )
 
-            st.success('ETL concluído. Resultados abaixo.')
+            st.success("ETL concluído. Resultados abaixo.")
 
-            if 'produto_agg' in reports:
-                st.subheader('Top produtos por receita')
-                st.dataframe(reports['produto_agg'].head(50))
-                csv_buf = reports['produto_agg'].to_csv(index=False).encode('utf-8')
-                st.download_button('Baixar produto_agg.csv', data=csv_buf, file_name='produto_agg.csv', mime='text/csv')
+            if "produto_agg" in reports:
+                st.subheader("Top produtos por receita")
+                st.dataframe(reports["produto_agg"].head(50))
+                csv_buf = reports["produto_agg"].to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "Baixar produto_agg.csv",
+                    data=csv_buf,
+                    file_name="produto_agg.csv",
+                    mime="text/csv",
+                )
 
-            if 'categoria_agg' in reports:
-                st.subheader('Categorias por receita')
-                st.dataframe(reports['categoria_agg'].head(50))
-                csv_buf = reports['categoria_agg'].to_csv(index=False).encode('utf-8')
-                st.download_button('Baixar categoria_agg.csv', data=csv_buf, file_name='categoria_agg.csv', mime='text/csv')
+            if "categoria_agg" in reports:
+                st.subheader("Categorias por receita")
+                st.dataframe(reports["categoria_agg"].head(50))
+                csv_buf = reports["categoria_agg"].to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "Baixar categoria_agg.csv",
+                    data=csv_buf,
+                    file_name="categoria_agg.csv",
+                    mime="text/csv",
+                )
 
-            if 'daily' in reports:
-                st.subheader('Últimos registros diários (até 60)')
-                st.dataframe(reports['daily'].tail(60))
-                csv_buf = reports['daily'].to_csv(index=False).encode('utf-8')
-                st.download_button('Baixar daily.csv', data=csv_buf, file_name='daily.csv', mime='text/csv')
+            if "daily" in reports:
+                st.subheader("Últimos registros diários (até 60)")
+                st.dataframe(reports["daily"].tail(60))
+                csv_buf = reports["daily"].to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "Baixar daily.csv",
+                    data=csv_buf,
+                    file_name="daily.csv",
+                    mime="text/csv",
+                )
 
         except Exception as e:
-            st.error(f'Erro durante o processamento: {e}')
+            st.error(f"Erro durante o processamento: {e}")
 
-st.markdown('---')
-st.markdown('Dica: se você tem seus arquivos no Google Drive, primeiro faça download para o seu computador e depois faça upload aqui para preservar privacidade e segurança.')
+st.markdown("---")
+st.markdown(
+    "Dica: se você tem seus arquivos no Google Drive, primeiro faça download para o seu computador e depois faça upload aqui para preservar privacidade e segurança."
+)
