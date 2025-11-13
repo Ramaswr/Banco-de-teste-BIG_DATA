@@ -1,8 +1,13 @@
 """Password strength checker using zxcvbn."""
+
+from typing import Any, Dict, List, Optional
+
 from zxcvbn import zxcvbn
 
 
-def check_password_strength(password: str, user_inputs: list = None) -> dict:
+def check_password_strength(
+    password: str, user_inputs: Optional[List[str]] = None
+) -> Dict[str, Any]:
     """
     Analyze password strength using zxcvbn.
     Returns dict with:
@@ -18,7 +23,9 @@ def check_password_strength(password: str, user_inputs: list = None) -> dict:
         "score": result["score"],
         "feedback": result["feedback"]["suggestions"],
         "warning": result["feedback"].get("warning", ""),
-        "estimated_seconds": result.get("crack_times_seconds", {}).get("online_throttling_100_per_hour", 0),
+        "estimated_seconds": result.get("crack_times_seconds", {}).get(
+            "online_throttling_100_per_hour", 0
+        ),
     }
 
 

@@ -1,7 +1,7 @@
 """SMS integration using Twilio with fallback logging."""
-import os
+
 import logging
-from typing import Optional
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -46,7 +46,9 @@ def send_otp(phone: str, otp: str, username: str = "") -> tuple[bool, str]:
 
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
         body_text = f"Seu código OTP para Jerr_BIG-DATE: {otp} (válido por 5 minutos)"
-        message = client.messages.create(body=body_text, from_=TWILIO_FROM_NUMBER, to=phone)
+        message = client.messages.create(
+            body=body_text, from_=TWILIO_FROM_NUMBER, to=phone
+        )
         logger.info(f"SMS enviado para {phone}: SID={message.sid}")
         return True, f"OTP enviado para {phone}"
     except Exception as e:

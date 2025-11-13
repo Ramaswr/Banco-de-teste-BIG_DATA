@@ -2,13 +2,15 @@
 
 This module provides a simple wrapper to compose verification emails.
 """
+
 from typing import Optional
-from urllib.parse import urlencode
-import os
+
 from utils.alerts import send_alert
 
 
-def send_verification_email(to_email: str, username: str, token: str, site_base: Optional[str] = None) -> bool:
+def send_verification_email(
+    to_email: str, username: str, token: str, site_base: Optional[str] = None
+) -> bool:
     subject = "Verificação de e-mail - Jerr_BIG-DATE"
     if site_base:
         # token delivered as query param
@@ -22,6 +24,7 @@ def send_verification_email(to_email: str, username: str, token: str, site_base:
 def send_phone_otp(phone: str, username: str, otp: str) -> bool:
     """Send OTP via SMS using utils.sms integration."""
     from utils.sms import send_otp
+
     success, msg = send_otp(phone, otp, username)
     print(msg)
     return success

@@ -1,9 +1,9 @@
 import hashlib
+import hashlib as _hashlib
 import os
+import secrets
 import sqlite3
 import time
-import secrets
-import hashlib as _hashlib
 from typing import Any, Dict, Optional
 
 DB_DIR = os.path.join(".secrets")
@@ -66,9 +66,9 @@ def _ensure_user_columns():
     cur = conn.cursor()
     cur.execute("PRAGMA table_info(users)")
     cols = [r[1] for r in cur.fetchall()]
-    if 'email_verified' not in cols:
+    if "email_verified" not in cols:
         cur.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0")
-    if 'phone_verified' not in cols:
+    if "phone_verified" not in cols:
         cur.execute("ALTER TABLE users ADD COLUMN phone_verified INTEGER DEFAULT 0")
     conn.commit()
     conn.close()
@@ -178,18 +178,23 @@ def list_users() -> list:
     _ensure_user_columns()
     conn = _get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT username, name, email, phone, role, created_at, email_verified, phone_verified FROM users")
+    cur.execute(
+        "SELECT username, name, email, phone, role, created_at, email_verified, phone_verified FROM users"
+    )
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
 
 
 def _hash_token(token: str) -> str:
-    return _hashlib.sha256(token.encode('utf-8')).hexdigest()
+    return _hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def create_verification_token(
-    username: str, token_type: str = "email", ttl_seconds: int = 3600, token: Optional[str] = None
+    username: str,
+    token_type: str = "email",
+    ttl_seconds: int = 3600,
+    token: Optional[str] = None,
 ) -> str:
     """Generate a token (or use provided `token`) for `username` and store its hash. Returns the raw token."""
     _init_db()
@@ -209,7 +214,7 @@ def create_verification_token(
     return token
 
 
-def verify_and_consume_token(token: str, token_type: str = 'email') -> bool:
+def verify_and_consume_token(token: str, token_type: str = "email") -> bool:
     """Verify token and mark corresponding flag on user. Returns True if successful."""
     _init_db()
     _ensure_user_columns()
@@ -225,20 +230,24 @@ def verify_and_consume_token(token: str, token_type: str = 'email') -> bool:
     if not row:
         conn.close()
         return False
-    if row['expires_at'] < now:
+    if row["expires_at"] < now:
         # expired, delete
-        cur.execute('DELETE FROM verification_tokens WHERE id = ?', (row['id'],))
+        cur.execute("DELETE FROM verification_tokens WHERE id = ?", (row["id"],))
         conn.commit()
         conn.close()
         return False
-    username = row['username']
+    username = row["username"]
     # mark verified
-    if token_type == 'email':
-        cur.execute('UPDATE users SET email_verified = 1 WHERE username = ?', (username,))
-    elif token_type == 'phone':
-        cur.execute('UPDATE users SET phone_verified = 1 WHERE username = ?', (username,))
+    if token_type == "email":
+        cur.execute(
+            "UPDATE users SET email_verified = 1 WHERE username = ?", (username,)
+        )
+    elif token_type == "phone":
+        cur.execute(
+            "UPDATE users SET phone_verified = 1 WHERE username = ?", (username,)
+        )
     # delete token
-    cur.execute('DELETE FROM verification_tokens WHERE id = ?', (row['id'],))
+    cur.execute("DELETE FROM verification_tokens WHERE id = ?", (row["id"],))
     conn.commit()
     conn.close()
     return True
@@ -249,7 +258,7 @@ def mark_email_verified(username: str):
     _ensure_user_columns()
     conn = _get_conn()
     cur = conn.cursor()
-    cur.execute('UPDATE users SET email_verified = 1 WHERE username = ?', (username,))
+    cur.execute("UPDATE users SET email_verified = 1 WHERE username = ?", (username,))
     conn.commit()
     conn.close()
 
@@ -259,7 +268,7 @@ def mark_phone_verified(username: str):
     _ensure_user_columns()
     conn = _get_conn()
     cur = conn.cursor()
-    cur.execute('UPDATE users SET phone_verified = 1 WHERE username = ?', (username,))
+    cur.execute("UPDATE users SET phone_verified = 1 WHERE username = ?", (username,))
     conn.commit()
     conn.close()
 
