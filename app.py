@@ -664,25 +664,3 @@ st.markdown(
 st.markdown(
     "**📋 Logs de Segurança:** Verifique `security.log` para auditoria de acessos."
 )
-st.markdown(
-    """
----
-## 🛡️ Medidas de Segurança Implementadas:
-
-1. **🔐 Autenticação** — Login com hash PBKDF2
-2. **⏱️ Rate Limiting** — Limite de 30 requisições por minuto
-3. **📁 Validação de Arquivos** — Verificação de extensão, tamanho e conteúdo
-4. **🛡️ Isolamento** — Uploads em diretório seguro (mode 700)
-5. **📊 Logging** — Todos os acessos registrados em `security.log`
-6. **🧹 Sanitização** — Remoção de caracteres perigosos
-7. **⏳ Sessão com Timeout** — Sessões expiram após 1 hora
-
-**⚠️ Próximos passos:**
-- Altere as credenciais padrão em `security.py`
-- Configure `.secrets/credentials.json` para produção
-- Use HTTPS em produção (não HTTP)
-- Configure firewall adequado
-"""
-)
-
-# deploy utilities (DuckDNS updater moved to deploy/duckdns/duckdns_updater.py)
