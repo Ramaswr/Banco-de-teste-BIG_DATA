@@ -12,6 +12,8 @@ import io
 import os
 
 import users as user_mgmt
+import secrets
+from utils.mailer import send_verification_email, send_phone_otp
 from ocr import image_to_text, pdf_to_tables_csv, save_text_as_csv_for_user
 from security import (
     credentials,
@@ -165,9 +167,43 @@ def login_page():
                         phone=r_phone or None,
                         role=r_role,
                     )
-                    st.success("Conta criada com sucesso! Faça login.")
+                    # send verification email if provided
+                    if r_email:
+                        token = user_mgmt.create_verification_token(r_username, token_type="email", ttl_seconds=3600)
+                        sent = send_verification_email(r_email, r_username, token, site_base=None)
+                        if sent:
+                            st.success("Conta criada. Enviamos um e-mail de verificação.")
+                        else:
+                            st.warning("Conta criada. Não foi possível enviar e-mail de verificação (SMTP não configurado).")
+                    else:
+                        st.success("Conta criada com sucesso! Faça login.")
+
+                    # phone OTP flow (optional)
+                    if r_phone:
+                        otp = str(secrets.randbelow(10 ** 6)).zfill(6)
+                        user_mgmt.create_verification_token(r_username, token_type="phone", ttl_seconds=300, token=otp)
+                        sms_sent = send_phone_otp(r_phone, r_username, otp)
+                        if sms_sent:
+                            st.info("OTP enviado por SMS para verificação de telefone.")
+                        else:
+                            st.info(f"OTP (teste): {otp} — em produção integre um provedor SMS para envio real.")
                 except Exception as e:
                     st.error(f"Erro ao criar conta: {e}")
+
+    # ---------- Verificação de token (email / phone) ----------
+    with st.expander("Confirmar conta / Verificar token", expanded=False):
+        st.write("Cole o código de verificação recebido por e-mail ou SMS.")
+        v_token = st.text_input("Código / Token", key="verify_token")
+        v_type = st.selectbox("Tipo de token", ["email", "phone"], index=0, key="verify_type")
+        if st.button("Verificar", key="btn_verify_token"):
+            if not v_token:
+                st.error("Insira o token recebido.")
+            else:
+                ok = user_mgmt.verify_and_consume_token(v_token.strip(), token_type=v_type)
+                if ok:
+                    st.success("Verificação concluída com sucesso!")
+                else:
+                    st.error("Token inválido ou expirado.")
 
     st.markdown("---")
     st.info(
