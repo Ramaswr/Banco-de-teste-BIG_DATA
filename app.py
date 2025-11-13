@@ -8,15 +8,10 @@ Streamlit app robusto com painel de controle para leitura de múltiplos formatos
 """
 
 import importlib
-import importlib.util
-import types
-import sys
 import io
-import os
-import hashlib
 from security import (
     credentials, rate_limiter, session_manager, 
-    file_validator, setup_secure_environment, get_security_headers
+    file_validator, setup_secure_environment
 )
 
 # Importar dependências
@@ -30,10 +25,8 @@ try:
 except:
     raise ModuleNotFoundError("pandas não encontrado. Instale: pip install pandas")
 
-try:
-    import numpy as np
-except:
-    np = None
+# numpy é opcional e não é usado diretamente neste arquivo; definir como None evita erros
+np = None
 
 try:
     import matplotlib.pyplot as plt
@@ -278,9 +271,43 @@ uploaded_file = st.file_uploader(
     key='file_upload'
 )
 
+# Limite estrito do cliente (defesa em profundidade)
+MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
 # ==================== PROCESSAR ARQUIVO ====================
 if uploaded_file is not None:
-    # Validar arquivo
+    # Checagem rápida do tamanho (client-side validation)
+    try:
+        # Alguns file-like objects expõem getbuffer/getvalue
+        if hasattr(uploaded_file, 'getbuffer'):
+            size_bytes = len(uploaded_file.getbuffer())
+        elif hasattr(uploaded_file, 'getvalue'):
+            size_bytes = len(uploaded_file.getvalue())
+        else:
+            # fallback: seek/tell
+            cur = None
+            try:
+                cur = uploaded_file.tell()
+            except Exception:
+                cur = None
+            try:
+                uploaded_file.seek(0, io.SEEK_END)
+                size_bytes = uploaded_file.tell()
+            finally:
+                if cur is not None:
+                    try:
+                        uploaded_file.seek(cur)
+                    except Exception:
+                        pass
+    except Exception:
+        size_bytes = None
+
+    if size_bytes is not None and size_bytes > MAX_BYTES:
+        st.error('❌ Arquivo maior que 10 MB. Por favor envie arquivos menores ou utilize o fluxo de upload para datasets grandes (presigned upload).')
+        st.stop()
+
+    # Validar arquivo com rotina de segurança
     is_valid, result = file_validator.validate_file(uploaded_file, uploaded_file.name)
     
     if not is_valid:
@@ -473,3 +500,60 @@ st.markdown("""
 - Use HTTPS em produção (não HTTP)
 - Configure firewall adequado
 """)
+
+#!/usr/bin/env python3
+import requests
+import os
+import time
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# Preferir carregar a partir de .secrets/duckdns.env ou variáveis de ambiente
+ENV_PATH = os.path.expanduser("~/.secrets/duckdns.env")
+DOMAINS = os.getenv("DUCKDNS_DOMAINS")
+TOKEN = os.getenv("DUCKDNS_TOKEN")
+
+if not (DOMAINS and TOKEN) and os.path.exists(ENV_PATH):
+    with open(ENV_PATH, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            k, _, v = line.partition("=")
+            if k == "DOMAIN" and not DOMAINS:
+                DOMAINS = v.strip()
+            if k == "TOKEN" and not TOKEN:
+                TOKEN = v.strip()
+
+if not (DOMAINS and TOKEN):
+    raise SystemExit("DUCKDNS_DOMAINS e DUCKDNS_TOKEN não configurados.")
+
+log_dir = os.path.expanduser("~/duckdns_py")
+os.makedirs(log_dir, exist_ok=True)
+log_path = os.path.join(log_dir, "duck.log")
+
+# criar session com retries
+session = requests.Session()
+retries = Retry(total=3, backoff_factor=1, status_forcelist=(500,502,503,504))
+session.mount("https://", HTTPAdapter(max_retries=retries))
+
+def update_duckdns():
+    url = f"https://www.duckdns.org/update?domains={DOMAINS}&token={TOKEN}"
+    try:
+        resp = session.get(url, timeout=10)
+        body = resp.text.strip()
+        now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+        with open(log_path, "a") as log_file:
+            log_file.write(f"{now} - {body} (status {resp.status_code})\\n")
+
+        print(f"Update response: {body}")
+        return body, resp.status_code
+    except requests.RequestException as e:
+        now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+        with open(log_path, "a") as log_file:
+            log_file.write(f"{now} - ERROR - {e}\\n")
+        print(f"Erro na requisição: {e}")
+        return None, None
+
+if __name__ == "__main__":
+    update_duckdns()

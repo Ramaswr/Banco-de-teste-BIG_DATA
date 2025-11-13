@@ -117,8 +117,8 @@ class FileValidator:
         'application/json'
     }
     
-    # Tamanho máximo de arquivo (100 MB)
-    MAX_FILE_SIZE = 100 * 1024 * 1024
+    # Tamanho máximo de arquivo (10 MB)
+    MAX_FILE_SIZE = 10 * 1024 * 1024
     
     # Diretório seguro para uploads
     UPLOAD_DIR = 'secure_uploads'
@@ -138,8 +138,31 @@ class FileValidator:
         if not filename.lower().endswith(tuple(f'.{ext}' for ext in cls.ALLOWED_EXTENSIONS)):
             return False, f"Extensão não permitida. Use: {', '.join(cls.ALLOWED_EXTENSIONS)}"
         
-        # 2. Verificar tamanho
-        file_size = len(file_obj.getvalue()) if hasattr(file_obj, 'getvalue') else file_obj.seek(0, 2)
+        # 2. Verificar tamanho (maneira robusta para file-like objects)
+        try:
+            # Alguns objetos (BytesIO) suportam getvalue()
+            if hasattr(file_obj, 'getvalue'):
+                file_size = len(file_obj.getvalue())
+            else:
+                # fallback: seek para o fim e tell
+                current = None
+                try:
+                    current = file_obj.tell()
+                except Exception:
+                    current = None
+                try:
+                    file_obj.seek(0, os.SEEK_END)
+                    file_size = file_obj.tell()
+                finally:
+                    if current is not None:
+                        try:
+                            file_obj.seek(current)
+                        except Exception:
+                            pass
+        except Exception as e:
+            logger.warning(f"Não foi possível determinar tamanho do arquivo: {e}")
+            return False, "Não foi possível determinar tamanho do arquivo"
+
         if file_size > cls.MAX_FILE_SIZE:
             return False, f"Arquivo muito grande. Máximo: {cls.MAX_FILE_SIZE / 1024 / 1024:.0f} MB"
         
