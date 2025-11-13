@@ -11,6 +11,7 @@ import importlib
 import io
 import os
 import secrets
+from typing import Any
 
 import users as user_mgmt
 from ocr import image_to_text, pdf_to_tables_csv, save_text_as_csv_for_user
@@ -41,31 +42,50 @@ try:
 except Exception:
     raise ModuleNotFoundError("pandas não encontrado. Instale: pip install pandas")
 
-# numpy é opcional e não é usado diretamente neste arquivo; definir como None evita erros
-np = None
-
+# numpy é opcional e não é usado diretamente neste arquivo; tentar importar
 try:
-    import matplotlib.pyplot as plt
+    import numpy as np  # type: ignore
+except Exception:
+    np = None
+
+# matplotlib.pyplot é reservado para futuras melhorias de visualização de dados
+try:
+    import matplotlib.pyplot as plt  # type: ignore
 except Exception:
     plt = None
 
-try:
-    from etl import aggregate_and_save, clean_date_df, clean_product_df, read_sales_csv
-except Exception:
-    # Fallbacks
-    def read_sales_csv(file_obj, sep=","):
-        return pd.read_csv(file_obj, sep=sep)
 
-    def clean_product_df(df):
-        return df
+# Funções fallback quando dependências não estão disponíveis
+def clean_product_df(df: Any) -> Any:
+    return df
 
-    def clean_date_df(df):
-        return df
 
-    def aggregate_and_save(
-        df_prod=None, df_date=None, output_folder="streamlit_output", save_prefix=""
-    ):
-        return [], {}
+def aggregate_and_save(
+    df_prod: Any = None,
+    df_date: Any = None,
+    output_folder: str = "streamlit_output",
+    save_prefix: str = "",
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    # Retorna dicionários vazios por padrão; implementar ETL real se necessário
+    return {}, {}
+
+
+def authenticate_user(username: str, password: str) -> bool:
+    """
+    Autentica usuário usando 3 sistemas:
+    1. Credentials.json (usuários locais pré-configurados)
+    2. SQLite (banco de usuários registrados)
+    3. Se falhar em ambos, retorna False
+    """
+    # Tentar autenticação em credentials.json
+    if credentials.authenticate(username, password):
+        return True
+
+    # Tentar autenticação em SQLite (usuários registrados)
+    if user_mgmt.authenticate(username, password):
+        return True
+
+    return False
 
 
 # ==================== CONFIGURAÇÃO ====================
@@ -127,7 +147,7 @@ def login_page():
 
         if st.button("🔓 Entrar", use_container_width=True, key="btn_login"):
             if username and password:
-                if credentials.authenticate(username, password):
+                if authenticate_user(username, password):
                     # Criar sessão
                     session_id = session_manager.create_session(username)
                     st.session_state.session_id = session_id
@@ -258,7 +278,7 @@ if "app_active" not in st.session_state:
 if "current_df" not in st.session_state:
     st.session_state.current_df = None
 if "file_info" not in st.session_state:
-    st.session_state.file_info = {}
+    st.session_state.file_info: dict[str, str | int] = {}
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "username" not in st.session_state:
@@ -468,7 +488,7 @@ if uploaded_file is not None:
                     df = pd.read_csv(uploaded_file, sep=separator, encoding=encoding)
 
                 st.session_state.current_df = df
-                st.session_state.file_info = {
+                st.session_state.file_info: dict[str, str | int] = {
                     "name": uploaded_file.name,
                     "size": len(df),
                     "columns": len(df.columns),
