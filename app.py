@@ -409,7 +409,7 @@ def login_page():
         unsafe_allow_html=True,
     )
 
-    col1, col2, col3 = st.columns([1, 2, 1])
+    _, col2, _ = st.columns([1, 2, 1])
 
     with col2:
         st.markdown("### Credenciais de Acesso")
@@ -556,7 +556,8 @@ if "app_active" not in st.session_state:
 if "current_df" not in st.session_state:
     st.session_state.current_df = None
 if "file_info" not in st.session_state:
-    st.session_state.file_info: dict[str, str | int] = {}
+    # Avoid runtime/type annotation issues by assigning without inline annotation
+    st.session_state.file_info = {}
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "username" not in st.session_state:
@@ -592,9 +593,11 @@ with col_user:
     st.markdown(f"👤 **Usuário:** {st.session_state.username}")
     # Mostrar badge de apoiador PIX no canto superior do perfil (se configurado)
     try:
-        meta = credentials.get_user_metadata(st.session_state.username)
+        # credentials.get_user_metadata possui tipagem imprecisa; tratar como Any e garantir dict para evitar erros de tipo
+        meta_raw = credentials.get_user_metadata(st.session_state.username)  # type: ignore[return-value]
+        meta: dict[str, Any] = meta_raw if isinstance(meta_raw, dict) else {}
         pix_key = meta.get("pix_key")
-        role = meta.get("role")
+        role = meta.get("role", "user")
     except Exception:
         pix_key = None
         role = "user"
@@ -766,7 +769,7 @@ if uploaded_file is not None:
                     df = pd.read_csv(uploaded_file, sep=separator, encoding=encoding)
 
                 st.session_state.current_df = df
-                st.session_state.file_info: dict[str, str | int] = {
+                st.session_state.file_info = {
                     "name": uploaded_file.name,
                     "size": len(df),
                     "columns": len(df.columns),

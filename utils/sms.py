@@ -8,9 +8,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Load Twilio config from .secrets/twilio.env
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER")
+twilio_account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+twilio_auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+twilio_from_number = os.getenv("TWILIO_FROM_NUMBER")
 
 ENV_PATH = os.path.expanduser(".secrets/twilio.env")
 if os.path.exists(ENV_PATH):
@@ -20,12 +20,16 @@ if os.path.exists(ENV_PATH):
             if not line or line.startswith("#"):
                 continue
             k, _, v = line.partition("=")
-            if k == "TWILIO_ACCOUNT_SID" and not TWILIO_ACCOUNT_SID:
-                TWILIO_ACCOUNT_SID = v.strip()
-            if k == "TWILIO_AUTH_TOKEN" and not TWILIO_AUTH_TOKEN:
-                TWILIO_AUTH_TOKEN = v.strip()
-            if k == "TWILIO_FROM_NUMBER" and not TWILIO_FROM_NUMBER:
-                TWILIO_FROM_NUMBER = v.strip()
+            if k == "TWILIO_ACCOUNT_SID" and not twilio_account_sid:
+                twilio_account_sid = v.strip()
+            if k == "TWILIO_AUTH_TOKEN" and not twilio_auth_token:
+                twilio_auth_token = v.strip()
+            if k == "TWILIO_FROM_NUMBER" and not twilio_from_number:
+                twilio_from_number = v.strip()
+
+TWILIO_ACCOUNT_SID = twilio_account_sid
+TWILIO_AUTH_TOKEN = twilio_auth_token
+TWILIO_FROM_NUMBER = twilio_from_number
 
 TWILIO_ENABLED = bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER)
 

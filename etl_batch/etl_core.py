@@ -87,17 +87,23 @@ from tqdm import tqdm
 import psutil
 
 # Optional acceleration
+has_dask = False
+has_gpu = False
+
 try:
     import dask.dataframe as dd
-    HAS_DASK = True
+    has_dask = True
 except ImportError:
-    HAS_DASK = False
+    pass
 
 try:
     import GPUtil
-    HAS_GPU = True
+    has_gpu = True
 except ImportError:
-    HAS_GPU = False
+    pass
+
+HAS_DASK = has_dask
+HAS_GPU = has_gpu
 
 # ═════════════════════════════════════════════════════════════════════════════
 # SECURITY & LOGGING INFRASTRUCTURE
@@ -229,13 +235,13 @@ def sanitize_filename(filename: str) -> str:
     filename = ''.join(c for c in filename if c.isalnum() or c in '._-')
     return filename[:255]  # Filesystem limit
 
-def rate_limit(max_calls: int, time_window_s: int):
+def rate_limit(max_calls: int, time_window_s: int) -> Callable:
     """Decorator for rate limiting."""
-    def decorator(func):
-        call_times = []
+    def decorator(func: Callable) -> Callable:
+        call_times: List[float] = []
         
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             nonlocal call_times
             now = datetime.now(timezone.utc).timestamp()
             # Remove old calls outside window
@@ -684,11 +690,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Quantum-Inspired Hybrid ETL Engine for Jerr_BIG-DATE",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python etl_core.py -i ./data -o ./output/data.csv --workers 8
-  python etl_core.py -i data.bin -o output.csv -p output.parquet
-        """
+        epilog="Examples:\n  python etl_core.py -i ./data -o ./output/data.csv --workers 8\n  python etl_core.py -i data.bin -o output.csv -p output.parquet"
     )
     
     parser.add_argument(
@@ -721,7 +723,7 @@ Examples:
         "--sample-frac",
         type=float,
         default=0.005,
-        help="Sample fraction for analytics (default: 0.005 = 0.5%)"
+        help="Sample fraction for analytics (default: 0.005 = 0.5 percent)"
     )
     parser.add_argument(
         "--record-struct",
