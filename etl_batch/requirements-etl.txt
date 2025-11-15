@@ -1,0 +1,21 @@
+# Quantum-Inspired Hybrid ETL Engine
+# Requirements for etl_batch module
+
+# Core Dependencies
+pandas>=2.0.0
+numpy>=1.24.0
+pyarrow>=12.0.0
+tqdm>=4.65.0
+psutil>=5.9.0
+
+# Optional: Advanced Analytics
+dask[complete]>=2023.11.0
+
+# Optional: GPU Acceleration
+GPUtil>=1.4.0
+
+# Development/Testing (optional)
+pytest>=7.4.0
+pytest-cov>=4.1.0
+black>=23.9.0
+pylint>=2.17.0
