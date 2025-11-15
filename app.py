@@ -102,16 +102,294 @@ if "setup_done" not in st.session_state:
 st.markdown(
     """
 <style>
-  :root { --bg:#0b1220; --card:#0f1724; --muted:#94a3b8; --accent:#7c3aed; --ok:#22c55e; }
-  .main .block-container{background-color:var(--bg); color:#e6eef8}
-  .dashboard-header{ background: linear-gradient(135deg,#0f1724 0%, #0b1220 100%); color: #e6eef8; padding:1.5rem; border-radius:8px; }
-  .control-panel{ background:var(--card); color:#dbeafe; padding:1rem; border-radius:8px; border-left:4px solid var(--accent); }
-  .status-badge{ display:inline-block; padding:0.4rem 0.8rem; border-radius:16px; font-weight:600 }
-  .status-active{ background:var(--ok); color:#032103 }
-  .status-inactive{ background:#ef4444; color:#2b0505 }
-  .security-banner{ background:#071029; border-left:4px solid #f59e0b; padding:0.8rem; border-radius:6px; margin-bottom:1rem }
-  /* small top-right supporter badge */
-  .supporter-badge{ position:relative; font-size:0.9rem; color:#a3e635; font-weight:600 }
+  /* Variáveis de cores */
+  :root {
+    --bg-primary: #0a0e27;
+    --bg-secondary: #0f1428;
+    --bg-tertiary: #1a1f3a;
+    --text-primary: #e6f0ff;
+    --text-secondary: #a8b5cc;
+    --accent-primary: #7c3aed;
+    --accent-secondary: #6366f1;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --error: #ef4444;
+    --border-color: #2d3748;
+  }
+
+  /* Fundo com padrão de códigos binários */
+  @keyframes binaryFlow {
+    0% { transform: translateY(0); opacity: 0.3; }
+    100% { transform: translateY(20px); opacity: 0; }
+  }
+
+  body, .main, .stApp {
+    background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+    color: var(--text-primary);
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+  }
+
+  /* Fundo com códigos binários animados */
+  .main::before {
+    content: '01010101 10101010 11001100 00110011 01010101 10101010 11001100 00110011';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    font-size: 14px;
+    color: rgba(124, 58, 237, 0.05);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    pointer-events: none;
+    z-index: -1;
+    font-family: 'Courier New', monospace;
+    line-height: 1.5;
+    overflow: hidden;
+  }
+
+  .main .block-container {
+    background-color: rgba(10, 14, 39, 0.8);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-top: 1rem;
+  }
+
+  /* Header do dashboard */
+  .dashboard-header {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.2) 0%, rgba(99, 102, 241, 0.1) 100%);
+    border: 1px solid rgba(124, 58, 237, 0.3);
+    color: var(--text-primary);
+    padding: 2rem;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+    box-shadow: 0 8px 32px rgba(124, 58, 237, 0.1);
+    backdrop-filter: blur(10px);
+  }
+
+  .dashboard-header h1 {
+    color: var(--accent-primary);
+    text-shadow: 0 0 20px rgba(124, 58, 237, 0.3);
+    margin-bottom: 0.5rem;
+  }
+
+  .dashboard-header p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+  }
+
+  /* Painel de controle */
+  .control-panel {
+    background: linear-gradient(135deg, rgba(15, 20, 40, 0.9) 0%, rgba(26, 31, 58, 0.9) 100%);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 1.5rem;
+    border-radius: 10px;
+    border-left: 4px solid var(--accent-primary);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    margin-bottom: 1rem;
+  }
+
+  /* Badges de status */
+  .status-badge {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .status-active {
+    background: linear-gradient(135deg, var(--success) 0%, #16a34a 100%);
+    color: #0a2e0a;
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+  }
+
+  .status-inactive {
+    background: linear-gradient(135deg, var(--error) 0%, #dc2626 100%);
+    color: #450a0a;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+  }
+
+  .status-pending {
+    background: linear-gradient(135deg, var(--warning) 0%, #d97706 100%);
+    color: #451a03;
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+  }
+
+  /* Banner de segurança */
+  .security-banner {
+    background: linear-gradient(135deg, rgba(7, 16, 41, 0.9) 0%, rgba(26, 31, 58, 0.9) 100%);
+    border-left: 4px solid var(--warning);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+  }
+
+  .security-banner strong {
+    color: var(--warning);
+  }
+
+  /* Formulários e inputs */
+  .stTextInput > div > div > input,
+  .stPasswordInput > div > div > input,
+  .stSelectbox > div > div > select,
+  .stTextArea > div > div > textarea {
+    background-color: rgba(26, 31, 58, 0.6) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-primary) !important;
+    border-radius: 8px !important;
+    padding: 0.75rem !important;
+  }
+
+  .stTextInput > div > div > input:focus,
+  .stPasswordInput > div > div > input:focus,
+  .stSelectbox > div > div > select:focus,
+  .stTextArea > div > div > textarea:focus {
+    border-color: var(--accent-primary) !important;
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1) !important;
+  }
+
+  /* Botões */
+  .stButton > button {
+    background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 16px rgba(124, 58, 237, 0.3);
+  }
+
+  .stButton > button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(124, 58, 237, 0.4);
+  }
+
+  /* Cards de informação */
+  .info-card {
+    background: linear-gradient(135deg, rgba(15, 20, 40, 0.7) 0%, rgba(26, 31, 58, 0.7) 100%);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    backdrop-filter: blur(10px);
+  }
+
+  /* Mensagens de alerta */
+  .stAlert {
+    border-radius: 8px;
+    border: 1px solid rgba(124, 58, 237, 0.3);
+    background-color: rgba(124, 58, 237, 0.1) !important;
+  }
+
+  /* Sidebar */
+  .sidebar .sidebar-content {
+    background: linear-gradient(180deg, rgba(15, 20, 40, 0.95) 0%, rgba(26, 31, 58, 0.95) 100%);
+  }
+
+  /* Tabs */
+  .stTabs [data-baseweb="tab-list"] {
+    gap: 1px;
+    background-color: transparent;
+  }
+
+  .stTabs [data-baseweb="tab"] {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+  }
+
+  .stTabs [aria-selected="true"] {
+    border-bottom: 2px solid var(--accent-primary);
+    color: var(--accent-primary);
+  }
+
+  /* Expander */
+  .streamlit-expanderHeader {
+    background-color: rgba(26, 31, 58, 0.5);
+    border-radius: 8px;
+    color: var(--text-primary);
+  }
+
+  .streamlit-expanderHeader:hover {
+    background-color: rgba(26, 31, 58, 0.7);
+  }
+
+  /* Scrollbar customizada */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(26, 31, 58, 0.5);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--accent-primary);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-secondary);
+  }
+
+  /* Supporter badge */
+  .supporter-badge {
+    position: relative;
+    font-size: 0.9rem;
+    color: #a3e635;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* Animações suaves */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .main .block-container > * {
+    animation: fadeIn 0.5s ease-out;
+  }
+
+  /* Tooltip */
+  .tooltip {
+    position: relative;
+    display: inline-block;
+    border-bottom: 1px dotted var(--accent-primary);
+  }
+
+  .tooltip .tooltiptext {
+    visibility: hidden;
+    width: 200px;
+    background-color: rgba(26, 31, 58, 0.95);
+    color: var(--text-primary);
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -100px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    border: 1px solid var(--accent-primary);
+  }
+
+  .tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+  }
 </style>
 """,
     unsafe_allow_html=True,
