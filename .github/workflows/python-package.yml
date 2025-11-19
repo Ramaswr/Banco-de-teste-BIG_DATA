@@ -1,35 +1,6 @@
 # This workflow will install Python dependencies, run tests and lint with a variety of Python versions
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
-            - nome: Configurar ambiente Node.js
-  utiliza: actions/setup-node@v6.0.0
-  com:
-    # Defina always-auth em npmrc.
-    sempre-autenticação: # opcional, o padrão é falso
-    # Especificação da versão a ser usada. Exemplos: 12.x, 10.15.1, >=10.15.0.
-    versão-do-node: # opcional
-    # Arquivo contendo a especificação da versão a ser usada. Exemplos: package.json, .nvmrc, .node-version, .tool-versions.
-    arquivo-versão-do-node: # opcional
-    # Arquitetura de destino que o Node deve usar. Exemplos: x86, x64. A arquitetura do sistema será usada por padrão.
-    arquitetura: # opcional
-    # Defina esta opção se desejar que a ação verifique a versão mais recente disponível que atenda à especificação de versão.
-    verificar-mais-recente: # opcional
-    # Registro opcional para configurar a autenticação. Isso configurará o registro em um arquivo .npmrc e .yarnrc no nível do projeto e definirá a autenticação para ler o token de autenticação de env.NODE_AUTH_TOKEN.
-    URL de registro: # opcional
-    # Escopo opcional para autenticação em registros com escopo definido. Ao usar o registro de pacotes do GitHub (https://npm.pkg.github.com/), o usuário será o proprietário do repositório.
-    escopo: # opcional
-    # Usado para obter distribuições do Node a partir de node-versions. Como existe um valor padrão, este normalmente não é fornecido pelo usuário. Ao executar esta ação no github.com, o valor padrão é suficiente. Ao executar no GHES, você pode fornecer um token de acesso pessoal para o github.com caso esteja enfrentando limitação de taxa.
-    token: # opcional, o padrão é ${{ github.server_url == 'https://github.com' && github.token || '' }}
-    # Usado para especificar um gerenciador de pacotes para armazenamento em cache no diretório padrão. Valores suportados: npm, yarn, pnpm.
-    cache: # opcional
-    # Defina como falso para desativar o cache automático. Por padrão, o cache é ativado quando devEngines.packageManager ou o campo packageManager de nível superior em package.json especifica o npm como gerenciador de pacotes.
-    package-manager-cache: # opcional, o padrão é verdadeiro
-    # Usado para especificar o caminho para um arquivo de dependência: package-lock.json, yarn.lock, etc. Suporta curingas ou uma lista de nomes de arquivos para armazenar em cache várias dependências.
-    caminho-dependência-de-cache: # opcional
-    # Usado para especificar um espelho alternativo para baixar binários do Node.js.
-    espelho: # opcional
-    # O token usado como cabeçalho de Autorização ao buscar dados do espelho
-    mirror-token: # opcional
-          
+
 name: Python package
 
 on:
@@ -41,7 +12,7 @@ on:
 jobs:
   build:
 
-    runs-on: ubuntu-latestm
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:

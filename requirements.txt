@@ -7,3 +7,6 @@ openpyxl
 pyarrow
 pydantic
 cryptography
+pytesseract
+pdfplumber
+Pillow
