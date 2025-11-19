@@ -1,3 +1,5 @@
+
+
 """Helpers para envio de e-mails de verificação (usa utils.alerts.send_alert).
 
 This module provides a simple wrapper to compose verification emails.

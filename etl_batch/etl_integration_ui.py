@@ -7,11 +7,15 @@ Purpose: Seamless Streamlit UI for launching and monitoring Quantum ETL jobs
 
 import streamlit as st
 import subprocess
-import json
 from pathlib import Path
 from datetime import datetime
-import time
 import psutil
+
+
+def _logical_cpu_count() -> int:
+    """Return a positive CPU count, falling back to 1 when psutil returns None."""
+    count = psutil.cpu_count()
+    return count if isinstance(count, int) and count > 0 else 1
 
 
 def etl_dashboard():
@@ -26,8 +30,9 @@ def etl_dashboard():
     
     col1, col2, col3 = st.columns([1, 1, 1])
     
+    logical_cores = _logical_cpu_count()
     with col1:
-        st.metric("CPU Cores", psutil.cpu_count(), "logical")
+        st.metric("CPU Cores", logical_cores, "logical")
     with col2:
         ram_gb = psutil.virtual_memory().total / 1024 / 1024 / 1024
         st.metric("Total RAM", f"{ram_gb:.1f}GB")
@@ -55,8 +60,8 @@ def etl_dashboard():
         workers = st.slider(
             "👷 Worker Processes",
             min_value=1,
-            max_value=psutil.cpu_count(),
-            value=max(1, psutil.cpu_count() - 1),
+            max_value=logical_cores,
+            value=max(1, logical_cores - 1),
             help="Number of parallel workers"
         )
     

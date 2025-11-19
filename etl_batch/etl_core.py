@@ -62,48 +62,56 @@ PERFORMANCE CHARACTERISTICS:
 - Memory: O(chunk_size * workers), typically 1-4GB for 8 workers on 64MB chunks
 """
 
-import logging
-import os
-import sys
 import argparse
-import struct
 import csv
-import secrets
-from pathlib import Path
-from typing import Dict, List, Tuple, Any, Optional, Callable
-from datetime import datetime, timezone
 import json
+import logging
 import math
-from dataclasses import dataclass, asdict
-from functools import wraps
-from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing as mp
-import hashlib
+import os
+import struct
+import sys
+from concurrent.futures import ProcessPoolExecutor, Future, as_completed
+from dataclasses import dataclass, asdict
+from datetime import datetime, timezone
+from functools import wraps
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, TypeVar, ParamSpec, cast
 
 # Core data libs
-import pandas as pd
 import numpy as np
-from tqdm import tqdm
+import pandas as pd
 import psutil
+from pandas import DataFrame
+from tqdm import tqdm
 
 # Optional acceleration
 has_dask = False
 has_gpu = False
 
 try:
-    import dask.dataframe as dd
+    import dask.dataframe as dd  # type: ignore[import]
+
     has_dask = True
 except ImportError:
-    pass
+    dd = None  # type: ignore[assignment]
 
 try:
-    import GPUtil
+    import GPUtil  # type: ignore[import]
+
     has_gpu = True
 except ImportError:
-    pass
+    GPUtil = None  # type: ignore[assignment]
 
 HAS_DASK = has_dask
 HAS_GPU = has_gpu
+
+def read_dataframe(*args: Any, **kwargs: Any) -> DataFrame:
+    """Wrapper that returns a typed pandas DataFrame."""
+    return cast(DataFrame, pd.read_csv(*args, **kwargs))  # type: ignore[call-overload]
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 # ═════════════════════════════════════════════════════════════════════════════
 # SECURITY & LOGGING INFRASTRUCTURE
@@ -235,25 +243,26 @@ def sanitize_filename(filename: str) -> str:
     filename = ''.join(c for c in filename if c.isalnum() or c in '._-')
     return filename[:255]  # Filesystem limit
 
-def rate_limit(max_calls: int, time_window_s: int) -> Callable:
+def rate_limit(max_calls: int, time_window_s: int) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorator for rate limiting."""
-    def decorator(func: Callable) -> Callable:
+
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         call_times: List[float] = []
-        
+
         @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             nonlocal call_times
             now = datetime.now(timezone.utc).timestamp()
-            # Remove old calls outside window
             call_times = [t for t in call_times if now - t < time_window_s]
-            
+
             if len(call_times) >= max_calls:
                 raise RuntimeError(f"Rate limit exceeded: {max_calls} calls per {time_window_s}s")
-            
+
             call_times.append(now)
             return func(*args, **kwargs)
-        
+
         return wrapper
+
     return decorator
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -277,7 +286,7 @@ class QuantumBinaryParser:
         try:
             values = self.struct_obj.unpack(raw_bytes)
             # Default schema: id, timestamp, quantity, value_cents, product_name
-            record = {
+            record: Dict[str, Any] = {
                 "id": int(values[0]),
                 "timestamp": int(values[1]),
                 "quantity": int(values[2]),
@@ -293,7 +302,7 @@ class QuantumBinaryParser:
     
     def parse_block(self, block: bytes) -> List[Dict[str, Any]]:
         """Parse block into records (quantum superposition)."""
-        records = []
+        records: List[Dict[str, Any]] = []
         for i in range(0, len(block), self.record_size):
             chunk = block[i:i+self.record_size]
             if len(chunk) == self.record_size:
@@ -345,13 +354,13 @@ def ingest_binary(config: ETLConfig, parser: QuantumBinaryParser):
             return parser.parse_block(block)
         
         with ProcessPoolExecutor(max_workers=config.workers) as executor:
-            futures = []
-            
+            futures: List[Future[List[Dict[str, Any]]]] = []
+
             for block in read_binary_chunked(str(bin_file), config.chunk_bytes, parser.record_size):
                 futures.append(executor.submit(process_block, block))
-            
+
             pbar = tqdm(total=len(futures), desc=f"Parsing {bin_file.name}", unit="chunk")
-            
+
             for future in as_completed(futures):
                 try:
                     records = future.result()
@@ -359,7 +368,12 @@ def ingest_binary(config: ETLConfig, parser: QuantumBinaryParser):
                         with write_lock:
                             header = not Path(config.output_csv).exists()
                             with open(config.output_csv, "a", newline="", encoding="utf-8") as f:
-                                writer = csv.DictWriter(f, fieldnames=records[0].keys(), delimiter=config.sep)
+                                fieldnames: List[str] = list(records[0].keys())
+                                writer = csv.DictWriter(
+                                    f,
+                                    fieldnames=fieldnames,
+                                    delimiter=config.sep,
+                                )
                                 if header:
                                     writer.writeheader()
                                 writer.writerows(records)
@@ -401,10 +415,11 @@ def quantum_stratified_analytics(csv_path: str, sample_fraction: float = 0.005, 
     
     # First pass: count strata (products)
     audit_log.info(f"Analytics: First pass - counting strata")
-    strata_counts = {}
+    strata_counts: Dict[str, int] = {}
     try:
-        df_first = pd.read_csv(csv_path, usecols=["product"], dtype=str)
-        strata_counts = df_first["product"].value_counts().to_dict()
+        df_first = read_dataframe(csv_path, usecols=["product"], dtype=str)
+        value_counts = df_first["product"].value_counts()
+        strata_counts = {str(product): int(count) for product, count in value_counts.items()}
     except Exception as e:
         audit_log.error(f"Analytics first pass error: {e}")
         return {"error": str(e), "status": "failed"}
@@ -421,15 +436,21 @@ def quantum_stratified_analytics(csv_path: str, sample_fraction: float = 0.005, 
     
     # Second pass: stratified sample
     audit_log.info(f"Analytics: Second pass - stratified sampling")
-    sampled_records = []
+    sampled_records: List[Dict[str, Any]] = []
     counters = {p: 0 for p in strata_counts.keys()}
     
     try:
-        df = pd.read_csv(csv_path)
-        for idx, row in df.iterrows():
+        df = read_dataframe(csv_path)
+        for _, row in df.iterrows():
             prod = row["product"]
             if counters.get(prod, 0) < sample_plan.get(prod, 0):
-                sampled_records.append(row)
+                row_dict: Dict[str, Any] = {col: row[col] for col in df.columns}
+                stratum_size = strata_counts.get(prod, 0)
+                sample_limit = sample_plan.get(prod, 0)
+                row_dict["sample_size"] = sample_limit
+                row_dict["stratum_size"] = stratum_size
+                row_dict["strata_fraction"] = (sample_limit / stratum_size) if stratum_size else 0.0
+                sampled_records.append(row_dict)
                 counters[prod] += 1
             
             if sum(counters.values()) >= sample_size:
@@ -442,7 +463,7 @@ def quantum_stratified_analytics(csv_path: str, sample_fraction: float = 0.005, 
     if not sampled_records:
         return {"error": "No samples collected", "status": "failed"}
     
-    df_sample = pd.DataFrame(sampled_records)
+    df_sample: DataFrame = pd.DataFrame(sampled_records)
     
     est_total_qty = 0.0
     est_total_val = 0.0
@@ -456,7 +477,7 @@ def quantum_stratified_analytics(csv_path: str, sample_fraction: float = 0.005, 
         est_total_qty += df_sample[df_sample["product"] == product]["quantity"].sum() * expansion_factor
         est_total_val += df_sample[df_sample["product"] == product]["value"].sum() * expansion_factor
     
-    result = {
+    result: Dict[str, Any] = {
         "status": "success",
         "total_rows": total_rows,
         "sample_size": len(df_sample),

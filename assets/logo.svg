@@ -5,14 +5,14 @@
       <stop offset="100%" stop-color="#42a5f5"/>
     </linearGradient>
   </defs>
-  <rect width="100%" height="100%" fill="#ffffff"/>
-  <rect x="10" y="10" rx="10" ry="10" width="580" height="180" fill="url(#g)" opacity="0.95"/>
+  <image href="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZgAATU0AKgAAAAgABgESAAMAAAABAAEAAAEaAAgAAAAPAAABIgEbAAgAAAAPAAABKgEoAAMAAAABAAIAAAITAAMAAAABAAEAAIdpAAQAAAABAAABTAAAANwACAAIAAgACADcwNgAAkAAABwAAAAQwMjMxoAEAAAMAAAABAAAEkYcBAAAOAAAADjIycFpvY2tleQACc2NyZWVuc2hvdAAAAAByY3J0ADc2Mzk0NwAAAPwAAABXAQAAAPcBAAAHAAAAGwAAAPUBAAAHAAAAMDIzMAAAAAAAAEhvbG9ncmFwaHkAAAAAY19pAGUAAAADADc1MwAAAAAyMDIzOjAxOjA2IDE0OjMxOjQ0AAAAAAAyMDIzOjAxOjA2IDE0OjMxOjQ0AAAAAACYAAAAwAAAAEwAAAAD/4AAEeAAoAHAAxADYASQBYAGUAcgAgAGwAbwBnAG8AIABjAG8AbQAgAGcAcgBhAGYAbwBzACAAcwBhAG4AYQAgAHAAcgBhAGIA..." width="100%" height="100%" preserveAspectRatio="xMidYMid slice"/>
+  <rect x="10" y="10" rx="10" ry="10" width="580" height="180" fill="url(#g)" opacity="0.6"/>
   <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
-        font-family="Segoe UI, Roboto, Arial, sans-serif" font-size="36" fill="#ffffff">
+        font-family="Segoe UI, Roboto, Arial, sans-serif" font-size="36" fill="#ffffff" stroke="#000000" stroke-width="0.5">
     Banco de teste
   </text>
   <text x="50%" y="68%" dominant-baseline="middle" text-anchor="middle"
-        font-family="Segoe UI, Roboto, Arial, sans-serif" font-size="20" fill="#e3f2fd">
+        font-family="Segoe UI, Roboto, Arial, sans-serif" font-size="20" fill="#e3f2fd" stroke="#000000" stroke-width="0.3">
     BIG_DATA — ETL & Análise (exemplo)
   </text>
 </svg>

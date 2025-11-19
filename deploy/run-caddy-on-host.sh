@@ -1,4 +1,9 @@
-#!/usr/bin/env bash
+TWILIO_ACCOUNT_SID=seu_account_sid
+TWILIO_AUTH_TOKEN=seu_auth_token
+TWILIO_FROM_NUMBER=+55123456789python3 -m venv .venv
+source .venv/bin/activate
+pip install streamlit zxcvbn twilio  # já instaladas, mas verificar
+streamlit run app.py#!/usr/bin/env bash
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

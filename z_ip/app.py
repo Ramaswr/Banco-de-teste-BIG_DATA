@@ -5,6 +5,11 @@ Streamlit app para upload dos CSVs e execução do ETL.
 - Permite baixar os CSVs resultantes
 """
 
+from typing import Any, Callable, Optional, Sequence, Tuple, cast
+
+MATRIX_BG_URL = "https://copilot.microsoft.com/shares/dkK4eArDkauRtywfQq3VW"
+
+
 try:
     import importlib
     import importlib.util
@@ -15,15 +20,19 @@ try:
     if importlib.util.find_spec("pandas") is None:
         mod = types.ModuleType("pandas")
 
-        def _missing(*a, **k):
+        def _missing(*args: Any, **kwargs: Any) -> None:
             raise ModuleNotFoundError(
                 "pandas não encontrado. Instale via 'pip install pandas' para executar o ETL."
             )
 
         # funções/objetos usados no app -> lançam erro informativo ao serem chamados
-        mod.read_csv = _missing
-        mod.DataFrame = type("DataFrameStub", (), {})  # placeholder leve
-        mod.__getattr__ = lambda name: _missing()
+        setattr(mod, "read_csv", _missing)
+        setattr(mod, "DataFrame", type("DataFrameStub", (), {}))  # placeholder leve
+
+        def _getattr(_: str) -> Any:
+            return _missing()
+
+        setattr(mod, "__getattr__", _getattr)
         sys.modules["pandas"] = mod
 
     # Importa streamlit (se não existir, gera exceção para cair no except e usar o stub de UI)
@@ -36,56 +45,67 @@ try:
 except Exception:
     # Streamlit não está disponível: fornecer um stub mínimo para permitir análise/execução não interativa.
     class _Column:
-        def __enter__(self):
+        def __enter__(self) -> "_Column":
             return self
 
-        def __exit__(self, exc_type, exc, tb):
+        def __exit__(
+            self,
+            exc_type: Optional[type[BaseException]] = None,
+            exc: Optional[BaseException] = None,
+            tb: Optional[Any] = None,
+        ) -> bool:
             return False
 
     class _Stub:
-        def set_page_config(self, *a, **k):
+        def set_page_config(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        def title(self, *a, **k):
+        def title(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        def markdown(self, *a, **k):
+        def markdown(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        def columns(self, n):
+        def columns(self, n: int) -> Tuple[_Column, ...]:
             return tuple(_Column() for _ in range(n))
 
-        def file_uploader(self, *a, **k):
+        def file_uploader(self, *args: Any, **kwargs: Any) -> Any:
             return None
 
-        def selectbox(self, label, options, index=0, key=None):
+        def selectbox(
+            self,
+            label: str,
+            options: Sequence[Any],
+            index: int = 0,
+            key: Optional[str] = None,
+        ) -> Any:
             try:
                 return options[index]
             except Exception:
                 return options[0] if options else None
 
-        def button(self, *a, **k):
+        def button(self, *args: Any, **kwargs: Any) -> bool:
             return False
 
-        def warning(self, *a, **k):
+        def warning(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        def info(self, *a, **k):
+        def info(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        def subheader(self, *a, **k):
+        def subheader(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        def dataframe(self, *a, **k):
+        def dataframe(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        def success(self, *a, **k):
+        def success(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        def download_button(self, *a, **k):
+        def download_button(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        def error(self, *a, **k):
+        def error(self, *args: Any, **kwargs: Any) -> None:
             pass
 
     st = _Stub()
@@ -99,34 +119,40 @@ try:
         pd = None
 
     try:
-        from etl import (
-            aggregate_and_save,
-            clean_date_df,
-            clean_product_df,
-            read_sales_csv,
-            run_etl,
-        )
+        import etl as etl_module
+        etl_module = cast(Any, etl_module)
+
+        AggregateFn = Callable[..., Tuple[list[Any], dict[str, Any]]]
+        GenericFn = Callable[..., Any]
+
+        aggregate_and_save = cast(AggregateFn, etl_module.aggregate_and_save)
+        clean_date_df = cast(GenericFn, etl_module.clean_date_df)
+        clean_product_df = cast(GenericFn, etl_module.clean_product_df)
+        read_sales_csv = cast(GenericFn, etl_module.read_sales_csv)
     except Exception:
         # Minimal fallbacks so the app can be analyzed/inspected without the etl module.
-        def read_sales_csv(file_obj, sep=","):
+        def read_sales_csv(file_obj: Any, sep: str = ",") -> Any:
             if pd is None:
                 raise ModuleNotFoundError(
                     "pandas não encontrado. Instale via 'pip install pandas' para executar o ETL."
                 )
             return pd.read_csv(file_obj, sep=sep)
 
-        def run_etl(*args, **kwargs):
+        def run_etl(*args: Any, **kwargs: Any) -> Any:
             raise ModuleNotFoundError("módulo etl não encontrado")
 
-        def clean_product_df(df):
+        def clean_product_df(df: Any) -> Any:
             return df
 
-        def clean_date_df(df):
+        def clean_date_df(df: Any) -> Any:
             return df
 
         def aggregate_and_save(
-            df_prod=None, df_date=None, output_folder="streamlit_output", save_prefix=""
-        ):
+            df_prod: Any = None,
+            df_date: Any = None,
+            output_folder: str = "streamlit_output",
+            save_prefix: str = "",
+        ) -> Tuple[list[str], dict[str, Any]]:
             # Retorna estrutura vazia compatível com o restante do app
             return [], {}
 
@@ -134,25 +160,48 @@ except Exception:
     # Em caso de erro inesperado, garantir que variáveis existam
     pd = None
 
-    def read_sales_csv(file_obj, sep=","):
+    def read_sales_csv(file_obj: Any, sep: str = ",") -> Any:
         raise ModuleNotFoundError("pandas não disponível")
 
-    def run_etl(*args, **kwargs):
+    def run_etl(*args: Any, **kwargs: Any) -> Any:
         raise ModuleNotFoundError("etl não disponível")
 
-    def clean_product_df(df):
+    def clean_product_df(df: Any) -> Any:
         return df
 
-    def clean_date_df(df):
+    def clean_date_df(df: Any) -> Any:
         return df
 
     def aggregate_and_save(
-        df_prod=None, df_date=None, output_folder="streamlit_output", save_prefix=""
-    ):
+        df_prod: Any = None,
+        df_date: Any = None,
+        output_folder: str = "streamlit_output",
+        save_prefix: str = "",
+    ) -> Tuple[list[str], dict[str, Any]]:
         return [], {}
 
 
 st.set_page_config(page_title="ETL Vendas - Análise", layout="wide")
+
+st.markdown(
+    f"""
+    <style>
+    .stApp {{
+        background-image: url('{MATRIX_BG_URL}');
+        background-size: cover;
+        background-attachment: fixed;
+        background-position: center;
+        color: #d4ffd4;
+    }}
+    .css-1d391kg, .block-container {{
+        background: rgba(0, 0, 0, 0.75);
+        border-radius: 12px;
+        padding: 32px !important;
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 st.title("ETL de Vendas — Upload e Análise")
 

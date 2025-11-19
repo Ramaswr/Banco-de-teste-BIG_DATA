@@ -11,7 +11,7 @@ import importlib
 import io
 import os
 import secrets
-from typing import Any
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, cast
 
 import users as user_mgmt
 from ocr import image_to_text, pdf_to_tables_csv, save_text_as_csv_for_user
@@ -28,6 +28,14 @@ from utils.password_strength import (
     get_strength_color,
     get_strength_label,
 )
+
+try:
+    from etl_batch.etl_core import QuantumBinaryParser
+except Exception:
+    QuantumBinaryParser = None  # type: ignore[assignment]
+
+credentials = cast(Any, credentials)
+file_validator = cast(Any, file_validator)
 
 # Importar dependências
 try:
@@ -68,6 +76,61 @@ def aggregate_and_save(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     # Retorna dicionários vazios por padrão; implementar ETL real se necessário
     return {}, {}
+
+
+class FileInfoDict(TypedDict, total=False):
+    name: str
+    size: int
+    columns: int
+    format: str
+
+
+ValidateFileFn = Callable[[Any, str], Tuple[bool, str]]
+GetUserMetadataFn = Callable[[str], Dict[str, Any]]
+FileInfoIntKey = Literal["size", "columns"]
+FileInfoStrKey = Literal["name", "format"]
+
+
+def get_current_username() -> Optional[str]:
+    """Retorna o usuário atual se definido corretamente na sessão."""
+    username_val = st.session_state.get("username")
+    return username_val if isinstance(username_val, str) and username_val else None
+
+
+def get_file_info_state() -> FileInfoDict:
+    """Garante acesso tipado ao dicionário de metadados do arquivo."""
+    data = st.session_state.get("file_info")
+    return cast(FileInfoDict, data) if isinstance(data, dict) else {}
+
+
+def file_info_int(key: FileInfoIntKey, default: int = 0) -> int:
+    value = get_file_info_state().get(key)
+    if isinstance(value, (int, float)):
+        return int(value)
+    return default
+
+
+def file_info_str(key: FileInfoStrKey, default: str = "N/A") -> str:
+    value = get_file_info_state().get(key)
+    if isinstance(value, str):
+        return value
+    return default
+
+
+def validate_uploaded_file(file_obj: Any, filename: str) -> tuple[bool, str]:
+    """Proxy tipado para file_validator.validate_file."""
+    validate_fn = cast(
+        ValidateFileFn, file_validator.validate_file  # type: ignore[assignment]
+    )
+    return validate_fn(file_obj, filename)
+
+
+def get_user_metadata(username: str) -> dict[str, Any]:
+    """Proxy tipado para credentials.get_user_metadata."""
+    metadata_fn = cast(
+        GetUserMetadataFn, credentials.get_user_metadata  # type: ignore[assignment]
+    )
+    return metadata_fn(username)
 
 
 def authenticate_user(username: str, password: str) -> bool:
@@ -155,6 +218,29 @@ st.markdown(
     padding: 2rem;
     margin-top: 1rem;
   }
+
+    body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image:
+            linear-gradient(180deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.9)),
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Crect width='400' height='400' fill='%23010718'/%3E%3Ctext x='20' y='40' fill='%2300ff9d' font-size='18' font-family='Courier New, Courier, monospace'%3E010010110101001101010010%0A101001011010100101010010%0A010101101001010010101010%0A101001010101101001010101%0A010110100101001010101010%3C/text%3E%3C/svg%3E");
+        background-size: cover, 400px 400px;
+        opacity: 0.2;
+        pointer-events: none;
+        z-index: -2;
+        animation: matrixDrift 22s linear infinite;
+    }
+
+    @keyframes matrixDrift {
+        from {
+            background-position: 0 0, 0 0;
+        }
+        to {
+            background-position: 0 0, 0 600px;
+        }
+    }
 
   /* Header do dashboard */
   .dashboard-header {
@@ -557,7 +643,7 @@ if "current_df" not in st.session_state:
     st.session_state.current_df = None
 if "file_info" not in st.session_state:
     # Avoid runtime/type annotation issues by assigning without inline annotation
-    st.session_state.file_info = {}
+    st.session_state.file_info = cast(FileInfoDict, {})
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "username" not in st.session_state:
@@ -592,15 +678,21 @@ col_user, col_logout = st.columns([9, 1])
 with col_user:
     st.markdown(f"👤 **Usuário:** {st.session_state.username}")
     # Mostrar badge de apoiador PIX no canto superior do perfil (se configurado)
-    try:
-        # credentials.get_user_metadata possui tipagem imprecisa; tratar como Any e garantir dict para evitar erros de tipo
-        meta_raw = credentials.get_user_metadata(st.session_state.username)  # type: ignore[return-value]
-        meta: dict[str, Any] = meta_raw if isinstance(meta_raw, dict) else {}
-        pix_key = meta.get("pix_key")
-        role = meta.get("role", "user")
-    except Exception:
-        pix_key = None
-        role = "user"
+    pix_key: Optional[str] = None
+    role = "user"
+    current_username = get_current_username()
+    if current_username:
+        try:
+            meta = get_user_metadata(current_username)
+            pix_val = meta.get("pix_key")
+            if isinstance(pix_val, str):
+                pix_key = pix_val
+            role_val = meta.get("role")
+            if isinstance(role_val, str):
+                role = role_val
+        except Exception:
+            pix_key = None
+            role = "user"
     if pix_key:
         if pix_key == "71281802140":
             st.markdown(
@@ -660,10 +752,21 @@ if not st.session_state.app_active:
 
 # ==================== BARRA LATERAL - CONFIGURAÇÕES ====================
 st.sidebar.title("⚙️ Configurações")
+user_role = st.session_state.get("user_role", "user")
+has_binary_access = user_role in {"admin", "super_admin"}
+
+file_format_options = [
+    "CSV",
+    "Excel (.xlsx/.xls)",
+    "Parquet (.parquet)",
+    "Texto (.txt)",
+]
+if has_binary_access:
+    file_format_options.append("BIN (quantum .bin)")
 
 file_format = st.sidebar.selectbox(
     "Formato do arquivo",
-    ["CSV", "Excel (.xlsx/.xls)", "Parquet (.parquet)", "Texto (.txt)"],
+    file_format_options,
     key="file_format",
 )
 
@@ -681,8 +784,25 @@ st.sidebar.info(
     "Painel robusto para análise de dados com suporte a múltiplos formatos e processamento ETL."
 )
 
+if has_binary_access:
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**🧬 Quantum Binary Mode (admins)**")
+    st.sidebar.success(
+        "Modo BIN habilitado: registros fixos `<IQIq32s>` com parser Quantum Binary. Envie arquivos .bin para convertê-los em DataFrame protegido innan do app."
+    )
+
 # ==================== SEÇÃO PRINCIPAL ====================
 st.markdown("## 📁 Carregar Arquivo")
+
+if has_binary_access:
+    with st.expander("Modo BIN quantum", expanded=False):
+        st.markdown(
+            """
+            - **Formato esperado:** registros fixos `<IQIq32s>` (id, timestamp, quantidade, valor em centavos, nome do produto).
+            - **Pipeline:** parser `QuantumBinaryParser` converte blocos .BIN em DataFrame protegido antes de gerar CSV/Parquet.
+            - **Recurso exclusivo:** disponível apenas para administradores/super admins autenticados.
+            """
+        )
 
 # Mapa de tipos de arquivo
 file_type_map = {
@@ -690,6 +810,7 @@ file_type_map = {
     "Excel (.xlsx/.xls)": ["xlsx", "xls"],
     "Parquet (.parquet)": ["parquet"],
     "Texto (.txt)": ["txt"],
+    "BIN (quantum .bin)": ["bin"],
 }
 
 allowed_types = file_type_map.get(file_format, ["csv"])
@@ -740,7 +861,7 @@ if uploaded_file is not None:
         st.stop()
 
     # Validar arquivo com rotina de segurança
-    is_valid, result = file_validator.validate_file(uploaded_file, uploaded_file.name)
+    is_valid, result = validate_uploaded_file(uploaded_file, uploaded_file.name)
 
     if not is_valid:
         st.error(f"❌ Arquivo rejeitado: {result}")
@@ -758,37 +879,110 @@ if uploaded_file is not None:
             try:
                 st.info("Carregando arquivo...")
 
-                # Detectar formato e carregar
+                # Detectar formato e carregar (fallbacks de encoding)
                 if file_format == "CSV":
-                    df = pd.read_csv(uploaded_file, sep=separator, encoding=encoding)
+                    # Try common encodings safely. uploaded_file is a BytesIO-like object.
+                    uploaded_file.seek(0)
+                    data_bytes = uploaded_file.read()
+                    encodings_to_try = ["utf-8", "latin-1"]
+                    decoded = None
+                    for enc in encodings_to_try:
+                        try:
+                            decoded = data_bytes.decode(enc)
+                            used_encoding = enc
+                            break
+                        except Exception:
+                            decoded = None
+                    if decoded is None:
+                        # Optional: try chardet if available
+                        try:
+                            import chardet
+
+                            guess = chardet.detect(data_bytes)
+                            if guess and guess.get("encoding"):
+                                decoded = data_bytes.decode(guess["encoding"], errors="replace")
+                                used_encoding = guess.get("encoding")
+                        except Exception:
+                            decoded = None
+                    if decoded is None:
+                        # Last resort: replace undecodable bytes
+                        decoded = data_bytes.decode("utf-8", errors="replace")
+                        used_encoding = "utf-8-replace"
+
+                    # Create a text stream for pandas
+                    from io import StringIO
+
+                    text_stream = StringIO(decoded)
+                    df = pd.read_csv(text_stream, sep=separator)
+
                 elif file_format == "Excel (.xlsx/.xls)":
+                    uploaded_file.seek(0)
                     df = pd.read_excel(uploaded_file)
+
                 elif file_format == "Parquet (.parquet)":
+                    uploaded_file.seek(0)
                     df = pd.read_parquet(uploaded_file)
-                else:  # Texto
-                    df = pd.read_csv(uploaded_file, sep=separator, encoding=encoding)
+
+                elif file_format == "BIN (quantum .bin)":
+                    if QuantumBinaryParser is None:
+                        raise ModuleNotFoundError("QuantumBinaryParser indisponível no ambiente atual")
+                    uploaded_file.seek(0)
+                    raw_bytes = uploaded_file.read()
+                    parser = QuantumBinaryParser("<IQIq32s>")
+                    record_size = parser.record_size
+                    if len(raw_bytes) < record_size:
+                        raise ValueError("BIN muito pequeno para conter registros válidos")
+                    aligned_len = len(raw_bytes) - (len(raw_bytes) % record_size)
+                    usable_bytes = raw_bytes[:aligned_len]
+                    block_size = max(record_size * 1024, record_size)
+                    records: List[Dict[str, Any]] = []
+                    for start in range(0, len(usable_bytes), block_size):
+                        block = usable_bytes[start : start + block_size]
+                        records.extend(parser.parse_block(block))
+                    if not records:
+                        raise ValueError("Nenhum registro identificado no arquivo BIN fornecido")
+                    df = pd.DataFrame(records)
+                    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", errors="coerce")
+
+                else:  # Texto (treat as CSV fallback)
+                    uploaded_file.seek(0)
+                    data_bytes = uploaded_file.read()
+                    try:
+                        text = data_bytes.decode("utf-8")
+                    except Exception:
+                        try:
+                            text = data_bytes.decode("latin-1")
+                        except Exception:
+                            text = data_bytes.decode("utf-8", errors="replace")
+                    from io import StringIO
+
+                    df = pd.read_csv(StringIO(text), sep=separator)
 
                 st.session_state.current_df = df
-                st.session_state.file_info = {
-                    "name": uploaded_file.name,
-                    "size": len(df),
-                    "columns": len(df.columns),
-                    "format": file_format,
-                }
+                st.session_state.file_info = cast(
+                    FileInfoDict,
+                    {
+                        "name": str(uploaded_file.name),
+                        "size": int(len(df)),
+                        "columns": int(len(df.columns)),
+                        "format": str(file_format),
+                    },
+                )
 
                 st.success("✅ Arquivo carregado com sucesso!")
 
             except Exception as e:
                 st.error(f"❌ Erro ao carregar: {str(e)}")
-                # Se falhar na leitura e o usuário for super_admin, oferecer OCR/PDF processing
-                try:
-                    meta = credentials.get_user_metadata(st.session_state.username)
+                current_username = get_current_username()
+                if current_username:
+                    try:
+                        meta = get_user_metadata(current_username)
+                    except Exception:
+                        meta = {}
                     if meta.get("role") == "super_admin":
                         st.info("Tentando processamento OCR/PDF para super admin...")
                         try:
-                            upload_dir = os.path.join(
-                                "secure_uploads", st.session_state.username
-                            )
+                            upload_dir = os.path.join("secure_uploads", current_username)
                             os.makedirs(upload_dir, exist_ok=True)
                             csvs = []
                             try:
@@ -796,7 +990,7 @@ if uploaded_file is not None:
                                 csvs = pdf_to_tables_csv(
                                     uploaded_file,
                                     upload_dir,
-                                    prefix=st.session_state.username,
+                                    prefix=current_username,
                                 )
                             except Exception:
                                 # tentar OCR de imagem para texto simples
@@ -804,7 +998,7 @@ if uploaded_file is not None:
                                     uploaded_file.seek(0)
                                     txt = image_to_text(uploaded_file)
                                     path = save_text_as_csv_for_user(
-                                        st.session_state.username,
+                                        current_username,
                                         txt,
                                         out_dir="secure_uploads",
                                     )
@@ -813,12 +1007,10 @@ if uploaded_file is not None:
                                     st.error(f"❌ OCR falhou: {e2}")
                             if csvs:
                                 st.success(
-                                    f"✅ Conversão concluída: {len(csvs)} arquivos gerados em secure_uploads/{st.session_state.username}"
+                                    f"✅ Conversão concluída: {len(csvs)} arquivos gerados em secure_uploads/{current_username}"
                                 )
                         except Exception as e3:
                             st.error(f"❌ Erro no processamento OCR: {e3}")
-                except Exception:
-                    pass
 
     with col2:
         if st.button("🧹 Limpar Dados", use_container_width=True, key="btn_clean"):
@@ -852,14 +1044,18 @@ if st.session_state.current_df is not None:
 
     # Informações do arquivo
     col1, col2, col3, col4 = st.columns(4)
+    file_lines = file_info_int("size")
+    file_columns = file_info_int("columns")
+    file_format_label = file_info_str("format")
+    file_name_display = file_info_str("name")
     with col1:
-        st.metric("Linhas", st.session_state.file_info.get("size", 0))
+        st.metric("Linhas", file_lines)
     with col2:
-        st.metric("Colunas", st.session_state.file_info.get("columns", 0))
+        st.metric("Colunas", file_columns)
     with col3:
-        st.metric("Formato", st.session_state.file_info.get("format", "N/A"))
+        st.metric("Formato", file_format_label)
     with col4:
-        st.metric("Arquivo", st.session_state.file_info.get("name", "N/A")[:20] + "...")
+        st.metric("Arquivo", (file_name_display[:20] + "...") if file_name_display else "N/A")
 
     # Tabs para diferentes visualizações
     tab1, tab2, tab3, tab4, tab5 = st.tabs(
@@ -890,13 +1086,14 @@ if st.session_state.current_df is not None:
     with tab4:
         st.markdown("### Exportar dados")
         col_csv, col_excel, col_parquet = st.columns(3)
+        download_name = file_info_str("name", "export")
 
         with col_csv:
             csv_buffer = st.session_state.current_df.to_csv(index=False).encode("utf-8")
             st.download_button(
                 "📥 CSV",
                 data=csv_buffer,
-                file_name=f'dados_{st.session_state.file_info.get("name", "export")}.csv',
+                file_name=f"dados_{download_name}.csv",
                 mime="text/csv",
                 use_container_width=True,
             )
@@ -908,7 +1105,7 @@ if st.session_state.current_df is not None:
             st.download_button(
                 "📥 Excel",
                 data=buffer,
-                file_name=f'dados_{st.session_state.file_info.get("name", "export")}.xlsx',
+                file_name=f"dados_{download_name}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
@@ -920,7 +1117,7 @@ if st.session_state.current_df is not None:
             st.download_button(
                 "📥 Parquet",
                 data=parquet_buffer,
-                file_name=f'dados_{st.session_state.file_info.get("name", "export")}.parquet',
+                file_name=f"dados_{download_name}.parquet",
                 mime="application/octet-stream",
                 use_container_width=True,
             )

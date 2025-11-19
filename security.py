@@ -129,7 +129,18 @@ class FileValidator:
     """Validador de arquivos para prevenir uploads maliciosos."""
 
     # Extensões permitidas
-    ALLOWED_EXTENSIONS = {"csv", "txt", "xlsx", "xls", "parquet", "json", "tsv"}
+    ALLOWED_EXTENSIONS = {
+        "csv",
+        "txt",
+        "xlsx",
+        "xls",
+        "parquet",
+        "json",
+        "tsv",
+        "bin",
+        "dat",
+        "hex",
+    }
 
     # MIME types permitidos
     ALLOWED_MIMES = {

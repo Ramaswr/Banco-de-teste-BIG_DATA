@@ -1,0 +1,1 @@
+st.markdown('<img src="assets/logo.svg" width="600" height="200">', unsafe_allow_html=True)

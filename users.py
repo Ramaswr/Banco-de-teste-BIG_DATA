@@ -3,33 +3,97 @@ import hashlib as _hashlib
 import os
 import secrets
 import sqlite3
+import tempfile
 import time
+from contextlib import contextmanager
 from typing import Any, Dict, Optional
 
-DB_DIR = os.path.join(".secrets")
-DB_PATH = os.path.join(DB_DIR, "users.db")
+from cryptography.fernet import Fernet, InvalidToken
+
+SECURE_DIR = os.path.join(".secure_users")
+ENCRYPTED_DB_PATH = os.path.join(SECURE_DIR, "users.db.enc")
+KEY_PATH = os.path.join(SECURE_DIR, "master.key")
 
 
-def _ensure_dir():
-    os.makedirs(DB_DIR, exist_ok=True)
+def _ensure_secure_dir() -> None:
+    os.makedirs(SECURE_DIR, exist_ok=True)
     try:
-        os.chmod(DB_DIR, 0o700)
+        os.chmod(SECURE_DIR, 0o700)
     except Exception:
         pass
 
 
-def _get_conn():
-    _ensure_dir()
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+def _load_key() -> bytes:
+    _ensure_secure_dir()
+    if not os.path.exists(KEY_PATH):
+        key = Fernet.generate_key()
+        with open(KEY_PATH, "wb") as key_file:
+            key_file.write(key)
+        try:
+            os.chmod(KEY_PATH, 0o600)
+        except Exception:
+            pass
+        return key
+    with open(KEY_PATH, "rb") as key_file:
+        return key_file.read()
+
+
+def _get_fernet() -> Fernet:
+    if not hasattr(_get_fernet, "_cache"):
+        setattr(_get_fernet, "_cache", Fernet(_load_key()))
+    return getattr(_get_fernet, "_cache")
+
+
+def _decrypt_to_temp() -> str:
+    _ensure_secure_dir()
+    tmp_fd, tmp_path = tempfile.mkstemp(prefix="users_db_", suffix=".sqlite", dir=SECURE_DIR)
+    os.close(tmp_fd)
+    if os.path.exists(ENCRYPTED_DB_PATH):
+        with open(ENCRYPTED_DB_PATH, "rb") as enc_file:
+            encrypted = enc_file.read()
+        if encrypted:
+            try:
+                plaintext = _get_fernet().decrypt(encrypted)
+            except InvalidToken:
+                plaintext = b""
+        else:
+            plaintext = b""
+        with open(tmp_path, "wb") as tmp_file:
+            tmp_file.write(plaintext)
+    return tmp_path
+
+
+def _persist_encrypted(tmp_path: str) -> None:
+    with open(tmp_path, "rb") as tmp_file:
+        data = tmp_file.read()
+    encrypted = _get_fernet().encrypt(data)
+    with open(ENCRYPTED_DB_PATH, "wb") as enc_file:
+        enc_file.write(encrypted)
+    try:
+        os.chmod(ENCRYPTED_DB_PATH, 0o600)
+    except Exception:
+        pass
+    os.remove(tmp_path)
+
+
+@contextmanager
+def _open_secure_conn():
+    tmp_path = _decrypt_to_temp()
+    conn = sqlite3.connect(tmp_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
+        _persist_encrypted(tmp_path)
 
 
 def _init_db():
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        """
+    with _open_secure_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
@@ -43,10 +107,10 @@ def _init_db():
         created_at INTEGER
     )
     """
-    )
-    # Ensure verification_tokens table exists
-    cur.execute(
-        """
+        )
+        # Ensure verification_tokens table exists
+        cur.execute(
+            """
     CREATE TABLE IF NOT EXISTS verification_tokens (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT NOT NULL,
@@ -55,23 +119,19 @@ def _init_db():
         expires_at INTEGER NOT NULL
     )
     """
-    )
-    conn.commit()
-    conn.close()
+        )
 
 
 def _ensure_user_columns():
     # Add columns if missing (for upgrades)
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute("PRAGMA table_info(users)")
-    cols = [r[1] for r in cur.fetchall()]
-    if "email_verified" not in cols:
-        cur.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0")
-    if "phone_verified" not in cols:
-        cur.execute("ALTER TABLE users ADD COLUMN phone_verified INTEGER DEFAULT 0")
-    conn.commit()
-    conn.close()
+    with _open_secure_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(users)")
+        cols = [r[1] for r in cur.fetchall()]
+        if "email_verified" not in cols:
+            cur.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0")
+        if "phone_verified" not in cols:
+            cur.execute("ALTER TABLE users ADD COLUMN phone_verified INTEGER DEFAULT 0")
 
 
 def _hash_password(password: str, iterations: int = 100000) -> str:
@@ -121,19 +181,16 @@ def create_user(
 
     _init_db()
     _ensure_user_columns()
-    conn = _get_conn()
-    cur = conn.cursor()
     now = int(time.time())
     try:
-        cur.execute(
-            "INSERT INTO users (username, name, email, phone, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (username, name, email, phone, password_hash, role, now),
-        )
-        conn.commit()
-    except sqlite3.IntegrityError:
-        conn.close()
-        raise ValueError("username already exists")
-    conn.close()
+        with _open_secure_conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO users (username, name, email, phone, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (username, name, email, phone, password_hash, role, now),
+            )
+    except sqlite3.IntegrityError as exc:
+        raise ValueError("username already exists") from exc
     return {
         "username": username,
         "name": name,
@@ -146,11 +203,10 @@ def create_user(
 def authenticate(username: str, password: str) -> bool:
     _init_db()
     _ensure_user_columns()
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
-    row = cur.fetchone()
-    conn.close()
+    with _open_secure_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
+        row = cur.fetchone()
     if not row:
         return False
     stored = row["password_hash"]
@@ -160,14 +216,13 @@ def authenticate(username: str, password: str) -> bool:
 def get_user_metadata(username: str) -> Optional[Dict[str, Any]]:
     _init_db()
     _ensure_user_columns()
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT username, name, email, phone, role, created_at, email_verified, phone_verified FROM users WHERE username = ?",
-        (username,),
-    )
-    row = cur.fetchone()
-    conn.close()
+    with _open_secure_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT username, name, email, phone, role, created_at, email_verified, phone_verified FROM users WHERE username = ?",
+            (username,),
+        )
+        row = cur.fetchone()
     if not row:
         return None
     return dict(row)
@@ -176,13 +231,12 @@ def get_user_metadata(username: str) -> Optional[Dict[str, Any]]:
 def list_users() -> list:
     _init_db()
     _ensure_user_columns()
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT username, name, email, phone, role, created_at, email_verified, phone_verified FROM users"
-    )
-    rows = [dict(r) for r in cur.fetchall()]
-    conn.close()
+    with _open_secure_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT username, name, email, phone, role, created_at, email_verified, phone_verified FROM users"
+        )
+        rows = [dict(r) for r in cur.fetchall()]
     return rows
 
 
@@ -203,14 +257,12 @@ def create_verification_token(
         token = secrets.token_urlsafe(32)
     token_hash = _hash_token(token)
     expires_at = int(time.time()) + int(ttl_seconds)
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO verification_tokens (username, token_hash, token_type, expires_at) VALUES (?, ?, ?, ?)",
-        (username, token_hash, token_type, expires_at),
-    )
-    conn.commit()
-    conn.close()
+    with _open_secure_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO verification_tokens (username, token_hash, token_type, expires_at) VALUES (?, ?, ?, ?)",
+            (username, token_hash, token_type, expires_at),
+        )
     return token
 
 
@@ -220,57 +272,45 @@ def verify_and_consume_token(token: str, token_type: str = "email") -> bool:
     _ensure_user_columns()
     token_hash = _hash_token(token)
     now = int(time.time())
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT id, username, expires_at FROM verification_tokens WHERE token_hash = ? AND token_type = ?",
-        (token_hash, token_type),
-    )
-    row = cur.fetchone()
-    if not row:
-        conn.close()
-        return False
-    if row["expires_at"] < now:
-        # expired, delete
+    with _open_secure_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, username, expires_at FROM verification_tokens WHERE token_hash = ? AND token_type = ?",
+            (token_hash, token_type),
+        )
+        row = cur.fetchone()
+        if not row:
+            return False
+        if row["expires_at"] < now:
+            cur.execute("DELETE FROM verification_tokens WHERE id = ?", (row["id"],))
+            return False
+        username = row["username"]
+        if token_type == "email":
+            cur.execute(
+                "UPDATE users SET email_verified = 1 WHERE username = ?", (username,)
+            )
+        elif token_type == "phone":
+            cur.execute(
+                "UPDATE users SET phone_verified = 1 WHERE username = ?", (username,)
+            )
         cur.execute("DELETE FROM verification_tokens WHERE id = ?", (row["id"],))
-        conn.commit()
-        conn.close()
-        return False
-    username = row["username"]
-    # mark verified
-    if token_type == "email":
-        cur.execute(
-            "UPDATE users SET email_verified = 1 WHERE username = ?", (username,)
-        )
-    elif token_type == "phone":
-        cur.execute(
-            "UPDATE users SET phone_verified = 1 WHERE username = ?", (username,)
-        )
-    # delete token
-    cur.execute("DELETE FROM verification_tokens WHERE id = ?", (row["id"],))
-    conn.commit()
-    conn.close()
     return True
 
 
 def mark_email_verified(username: str):
     _init_db()
     _ensure_user_columns()
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute("UPDATE users SET email_verified = 1 WHERE username = ?", (username,))
-    conn.commit()
-    conn.close()
+    with _open_secure_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE users SET email_verified = 1 WHERE username = ?", (username,))
 
 
 def mark_phone_verified(username: str):
     _init_db()
     _ensure_user_columns()
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute("UPDATE users SET phone_verified = 1 WHERE username = ?", (username,))
-    conn.commit()
-    conn.close()
+    with _open_secure_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE users SET phone_verified = 1 WHERE username = ?", (username,))
 
 
 def import_password_hash(username: str, password_hash: str, **meta):
