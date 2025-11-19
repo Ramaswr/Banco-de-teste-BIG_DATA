@@ -46,7 +46,7 @@ def send_otp(phone: str, otp: str, username: str = "") -> tuple[bool, str]:
         return False, msg
 
     try:
-        from twilio.rest import Client
+        from twilio.rest import Client  # type: ignore[import-not-found]
 
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
         body_text = f"Seu código OTP para Jerr_BIG-DATE: {otp} (válido por 5 minutos)"
