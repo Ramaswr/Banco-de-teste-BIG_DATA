@@ -187,7 +187,7 @@ Projeto/
 3. Scripts:
    - `scripts/start_sandbox_vm.sh`: restaura snapshot, remonta `secure_uploads/sandbox_queue` como somente leitura e inicia a VM em modo headless.
    - `scripts/stop_sandbox_vm.sh`: envia ACPI poweroff e remove o compartilhamento para evitar vazamentos.
-4. No app Streamlit use os botões “Iniciar/Encerrar VM isolada” para disparar esses scripts — **apenas visíveis para o usuário com `role = super_admin`**; demais perfis recebem aviso e não conseguem manipular a sandbox.
+4. No app Streamlit todos os perfis visualizam o painel ANY.RUN, mas somente o nível **Senior (Root)** (`role = super_admin`, recomendado para `jerr`) consegue executar as ações. Perfis **New**/**Pro** recebem alerta de "Permissão negada" orientando contato com o Analista Jerr (e-mail definido em `SANDBOX_CONTACT_EMAIL`).
 5. Dentro da VM copie o sample para `/tmp/sandbox_work`, faça upload no `https://app.any.run/` e execute o script interno de limpeza (`shred`) antes de desligar.
 6. Finalize clicando em “Limpar fila local”, que remove todos os arquivos de `secure_uploads/sandbox_queue` no host.
 7. Se precisar de outra análise, reinicie o fluxo para garantir ambiente limpo.

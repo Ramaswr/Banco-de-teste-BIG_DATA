@@ -100,7 +100,7 @@ python etl.py --product caminho/produto.csv --date caminho/date.csv --output res
 - Para **arquivos suspeitos** (ZIP, executáveis, documentos), utilize o botão "Armazenar para sandbox" — o arquivo é salvo em `secure_uploads/sandbox_queue` com permissões restritas e tamanho máximo de 15 MB.
 - Os dados ficam apenas na sua máquina; use os atalhos "Abrir trends oficiais" e "Abrir console ANY.RUN" para enviar manualmente o material ao serviço cloud quando desejar.
 - Recomenda-se revisar e excluir periodicamente os arquivos processados da pasta `secure_uploads/sandbox_queue` após concluir a análise externa.
-- O painel sandbox só aparece para o usuário com `role = "super_admin"`; contas comuns recebem apenas o aviso de indisponibilidade.
+- Todos os usuários visualizam o painel, mas somente o nível **Senior (Root)** — tipicamente o usuário `jerr` com `role = "super_admin"` — consegue executar ações. Caso um perfil **New** ou **Pro** toque em qualquer botão, o app exibe alerta "Permissão negada" e orienta a contatar o Analista Jerr por e-mail (ajustável via `SANDBOX_CONTACT_EMAIL`).
 - Para isolar a análise, configure a VM Linux endurecida no VirtualBox e utilize os scripts `scripts/start_sandbox_vm.sh` e `scripts/stop_sandbox_vm.sh` (não se esqueça do `chmod +x`). O primeiro restaura um snapshot "baseline", monta `secure_uploads/sandbox_queue` como leitura e inicia a VM em modo headless; o segundo envia ACPI poweroff e desmonta o compartilhamento.
 - Execute o fluxo sugerido: (1) salvar arquivo na fila; (2) clicar em "Iniciar VM isolada"; (3) dentro da VM copiar o sample para `/tmp/sandbox_work` e subir no ANY.RUN; (4) ao terminar, rodar o script de limpeza interno e clicar em "Encerrar VM isolada" seguido de "Limpar fila local".
 

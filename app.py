@@ -184,6 +184,17 @@ except Exception:
 
 SANDBOX_START_SCRIPT = BASE_DIR / "scripts" / "start_sandbox_vm.sh"
 SANDBOX_STOP_SCRIPT = BASE_DIR / "scripts" / "stop_sandbox_vm.sh"
+SANDBOX_CONTACT_EMAIL = os.environ.get("SANDBOX_CONTACT_EMAIL", "analista@jerr.app")
+ROLE_LABELS = {
+    "super_admin": "Senior (Root)",
+    "senior": "Senior (Root)",
+    "security_pro": "Pro",
+    "pro_admin": "Pro",
+    "pro": "Pro",
+    "analyst": "New",
+    "user": "New",
+    "viewer": "New",
+}
 
 ANYRUN_PUBLIC_URL = "https://any.run/malware-trends/"
 ANYRUN_APP_URL = (
@@ -238,6 +249,24 @@ def has_sandbox_access() -> bool:
     """Retorna True apenas para o perfil de super administrador."""
     role = st.session_state.get("user_role", "user")
     return role == "super_admin"
+
+
+def get_role_label(role: str) -> str:
+    """Mapeia cargo interno para label exibida."""
+    return ROLE_LABELS.get(role, "New")
+
+
+def sandbox_guard(action_desc: str) -> bool:
+    """Bloqueia ações se o usuário não for Senior/Root."""
+    if has_sandbox_access():
+        return True
+    warning_msg = (
+        f"Permissão negada para '{action_desc}'. Contate o Analista Jerr em {SANDBOX_CONTACT_EMAIL} "
+        "para solicitar elevação (níveis: New, Pro, Senior)."
+    )
+    st.error(warning_msg)
+    st.session_state.security_events.append(f"Sandbox bloqueado ({action_desc}) para {st.session_state.username}")
+    return False
 
 # CSS customizado para aparência Dark
 st.markdown(
@@ -779,6 +808,7 @@ with col_user:
             )
     # armazenar role em session_state para uso posterior
     st.session_state.user_role = role
+    st.caption(f"🔑 Nível: {get_role_label(role)}")
 with col_logout:
     if st.button("🚪 Sair", key="btn_logout", use_container_width=True):
         session_manager.destroy_session(session_id)
@@ -976,83 +1006,92 @@ with tab_ai:
         st.info(answer)
 
 st.markdown("### 🧪 Sandbox ANY.RUN")
+st.info(
+    "Envie URLs ou arquivos suspeitos para quarentena local e abra o painel oficial do ANY.RUN para análise profunda. "
+    "Os dados permanecem na sua máquina; o upload para o serviço externo é opcional e manual."
+)
 if not has_sandbox_access():
-    st.warning("Recurso disponível apenas para o super administrador. Solicite ao responsável pelo ambiente.")
-else:
-    st.info(
-        "Envie URLs ou arquivos suspeitos para quarentena local e abra o painel oficial do ANY.RUN para análise profunda. "
-        "Os dados permanecem na sua máquina; o upload para o serviço externo é opcional e manual."
+    st.warning(
+        f"Visualização liberada. Ações críticas restritas ao nível Senior (Root). Contate o Analista Jerr em {SANDBOX_CONTACT_EMAIL} "
+        "para solicitar elevação (níveis: New, Pro, Senior)."
     )
 
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.markdown("#### URL suspeita")
-        sandbox_url = st.text_input(
-            "Cole o link a ser investigado",
-            placeholder="https://exemplo.com/malware",
-            key="sandbox_url_input",
-        )
-        if st.button("Pré-verificar URL", key="btn_sandbox_url"):
-            if not sandbox_url.strip():
-                st.warning("Informe uma URL antes de validar.")
-            else:
-                report = analyze_url(sandbox_url)
-                verdict = "✅ Nenhum indicador crítico" if report["safe"] else "⚠️ Indicadores suspeitos"
-                st.write(verdict)
-                for reason in report["reasons"]:
-                    st.write(f"- {reason}")
-                st.session_state.security_events.append(
-                    f"Sandbox URL {'limpa' if report['safe'] else 'suspeita'}: {report['input']}"
-                )
-        st.markdown(
-            f"[Abrir trends oficiais]({ANYRUN_PUBLIC_URL}) · [Abrir console ANY.RUN]({ANYRUN_APP_URL})"
-        )
-
-    with col_b:
-        st.markdown("#### Arquivo suspeito")
-        sandbox_file = st.file_uploader(
-            "Envie ZIP ou documento para quarentena",
-            type=["zip", "rar", "7z", "exe", "dll", "pdf", "docx", "xlsx"],
-            key="sandbox_file_uploader",
-            help="Os arquivos são salvos em secure_uploads/sandbox_queue para análise manual na sandbox.",
-        )
-        if st.button("Armazenar para sandbox", key="btn_save_sandbox"):
-            if sandbox_file is None:
-                st.warning("Selecione um arquivo antes de armazenar.")
-            else:
-                data = sandbox_file.getvalue()
-                if len(data) > MAX_SANDBOX_BYTES:
-                    st.error("Arquivo maior que 15 MB — use a sandbox manualmente.")
-                else:
-                    safe_name = Path(sandbox_file.name).name.replace(" ", "_")
-                    dest = SANDBOX_QUEUE_DIR / f"sample_{int(time.time())}_{safe_name}"
-                    dest.write_bytes(data)
-                    st.success(f"Arquivo guardado em {dest} — pronto para submissão ao ANY.RUN.")
-                    st.session_state.security_events.append(f"Arquivo enviado à sandbox: {dest.name}")
-                    st.session_state.sandbox_files += 1
-
-    st.markdown("#### Controle da sandbox isolada (VirtualBox)")
-    st.caption(
-        "Scripts em scripts/start_sandbox_vm.sh e scripts/stop_sandbox_vm.sh piloto automação com snapshot limpo, "
-        "rede NAT e montagem somente leitura de secure_uploads/sandbox_queue."
+col_a, col_b = st.columns(2)
+with col_a:
+    st.markdown("#### URL suspeita")
+    sandbox_url = st.text_input(
+        "Cole o link a ser investigado",
+        placeholder="https://exemplo.com/malware",
+        key="sandbox_url_input",
     )
-    vm_col1, vm_col2, vm_col3 = st.columns(3)
-    with vm_col1:
-        if st.button("Iniciar VM isolada", key="btn_vm_start"):
+    if st.button("Pré-verificar URL", key="btn_sandbox_url"):
+        if not sandbox_guard("Pré-verificar URL"):
+            pass
+        elif not sandbox_url.strip():
+            st.warning("Informe uma URL antes de validar.")
+        else:
+            report = analyze_url(sandbox_url)
+            verdict = "✅ Nenhum indicador crítico" if report["safe"] else "⚠️ Indicadores suspeitos"
+            st.write(verdict)
+            for reason in report["reasons"]:
+                st.write(f"- {reason}")
+            st.session_state.security_events.append(
+                f"Sandbox URL {'limpa' if report['safe'] else 'suspeita'}: {report['input']}"
+            )
+    st.markdown(
+        f"[Abrir trends oficiais]({ANYRUN_PUBLIC_URL}) · [Abrir console ANY.RUN]({ANYRUN_APP_URL})"
+    )
+
+with col_b:
+    st.markdown("#### Arquivo suspeito")
+    sandbox_file = st.file_uploader(
+        "Envie ZIP ou documento para quarentena",
+        type=["zip", "rar", "7z", "exe", "dll", "pdf", "docx", "xlsx"],
+        key="sandbox_file_uploader",
+        help="Os arquivos são salvos em secure_uploads/sandbox_queue para análise manual na sandbox.",
+    )
+    if st.button("Armazenar para sandbox", key="btn_save_sandbox"):
+        if not sandbox_guard("Armazenar arquivo"):
+            pass
+        elif sandbox_file is None:
+            st.warning("Selecione um arquivo antes de armazenar.")
+        else:
+            data = sandbox_file.getvalue()
+            if len(data) > MAX_SANDBOX_BYTES:
+                st.error("Arquivo maior que 15 MB — use a sandbox manualmente.")
+            else:
+                safe_name = Path(sandbox_file.name).name.replace(" ", "_")
+                dest = SANDBOX_QUEUE_DIR / f"sample_{int(time.time())}_{safe_name}"
+                dest.write_bytes(data)
+                st.success(f"Arquivo guardado em {dest} — pronto para submissão ao ANY.RUN.")
+                st.session_state.security_events.append(f"Arquivo enviado à sandbox: {dest.name}")
+                st.session_state.sandbox_files += 1
+
+st.markdown("#### Controle da sandbox isolada (VirtualBox)")
+st.caption(
+    "Scripts em scripts/start_sandbox_vm.sh e scripts/stop_sandbox_vm.sh piloto automação com snapshot limpo, "
+    "rede NAT e montagem somente leitura de secure_uploads/sandbox_queue."
+)
+vm_col1, vm_col2, vm_col3 = st.columns(3)
+with vm_col1:
+    if st.button("Iniciar VM isolada", key="btn_vm_start"):
+        if sandbox_guard("Iniciar VM isolada"):
             run_sandbox_script(
                 SANDBOX_START_SCRIPT,
                 "VM Linux endurecida iniciada com snapshot limpo.",
                 "Sandbox VM iniciada",
             )
-    with vm_col2:
-        if st.button("Encerrar VM isolada", key="btn_vm_stop"):
+with vm_col2:
+    if st.button("Encerrar VM isolada", key="btn_vm_stop"):
+        if sandbox_guard("Encerrar VM isolada"):
             run_sandbox_script(
                 SANDBOX_STOP_SCRIPT,
                 "VM isolada desligada com segurança.",
                 "Sandbox VM parada",
             )
-    with vm_col3:
-        if st.button("Limpar fila local", key="btn_vm_purge"):
+with vm_col3:
+    if st.button("Limpar fila local", key="btn_vm_purge"):
+        if sandbox_guard("Limpar fila local"):
             removed = clear_sandbox_queue()
             if removed:
                 st.success(f"{removed} arquivo(s) removido(s) de secure_uploads/sandbox_queue.")
