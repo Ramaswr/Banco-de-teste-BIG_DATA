@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Script para criar uma Release no GitHub via API REST.
-Uso: python create_release.py <token> <owner> <repo> <tag> <zip_file>
-Exemplo: python create_release.py ghp_xxxxx Ramaswr Banco-de-teste-BIG_DATA v0.1.0 zip_Jerr.js
+Uso: python create_release.py <token> <owner> <repo> <tag> <zip_file> [release_notes.md]
+Exemplo: python create_release.py ghp_xxxxx Ramaswr Banco-de-teste-BIG_DATA v1.1 zip_Jerr.js RELEASE_NOTES.md
 """
 
 import os
@@ -11,7 +11,30 @@ import sys
 import requests
 
 
-def create_release(token, owner, repo, tag, zip_file):
+def _load_body(tag: str, notes_path: str | None) -> str:
+    if notes_path and os.path.exists(notes_path):
+        with open(notes_path, "r", encoding="utf-8") as handle:
+            notes = handle.read()
+        return notes
+
+    return f"""# {tag} — Banco de teste BIG_DATA
+
+Pacote para análises seguras e execuções da plataforma BIG DATA.
+
+## Instruções rápidas
+```bash
+unzip zip_Jerr.js
+cd z_ip
+./bootstrap.sh
+source .venv/bin/activate
+streamlit run app.py
+```
+
+Consulte RELEASE_NOTES.md para o changelog completo.
+"""
+
+
+def create_release(token, owner, repo, tag, zip_file, notes_path=None):
     """Criar release no GitHub com arquivo anexado."""
 
     if not os.path.exists(zip_file):
@@ -31,30 +54,7 @@ def create_release(token, owner, repo, tag, zip_file):
     release_data = {
         "tag_name": tag,
         "name": f"{tag} — Banco de teste BIG_DATA",
-        "body": f"""# {tag} — Initial Release
-
-Package for secure analysis and pentest testing.
-
-## Artifact
-- `zip_Jerr.js` — Complete package with bootstrap script
-
-## Integrity (SHA256)
-```
-e2bca9774892c8d52d683271634d3d340ff8c9326073f4980f505ed0512c11f5  zip_Jerr.js
-```
-
-## Quick Start
-```bash
-unzip zip_Jerr.js
-cd z_ip
-./bootstrap.sh
-source .venv/bin/activate
-streamlit run app.py
-```
-
-## Licença
-MIT License — veja LICENSE para detalhes
-""",
+        "body": _load_body(tag, notes_path),
         "draft": False,
         "prerelease": False,
     }
@@ -124,5 +124,6 @@ if __name__ == "__main__":
     repo = sys.argv[3]
     tag = sys.argv[4]
     zip_file = sys.argv[5]
+    notes_file = sys.argv[6] if len(sys.argv) >= 7 else None
 
-    create_release(token, owner, repo, tag, zip_file)
+    create_release(token, owner, repo, tag, zip_file, notes_file)
