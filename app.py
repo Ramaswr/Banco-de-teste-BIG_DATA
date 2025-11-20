@@ -11,6 +11,8 @@ import importlib
 import io
 import os
 import secrets
+import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, cast
@@ -172,12 +174,16 @@ try:
 except Exception:
     pass
 
+BASE_DIR = Path(__file__).resolve().parent
 SANDBOX_QUEUE_DIR = SECURE_UPLOAD_ROOT / "sandbox_queue"
 SANDBOX_QUEUE_DIR.mkdir(parents=True, exist_ok=True)
 try:
     os.chmod(SANDBOX_QUEUE_DIR, 0o700)
 except Exception:
     pass
+
+SANDBOX_START_SCRIPT = BASE_DIR / "scripts" / "start_sandbox_vm.sh"
+SANDBOX_STOP_SCRIPT = BASE_DIR / "scripts" / "stop_sandbox_vm.sh"
 
 ANYRUN_PUBLIC_URL = "https://any.run/malware-trends/"
 ANYRUN_APP_URL = (
@@ -189,6 +195,43 @@ MAX_SANDBOX_BYTES = 15 * 1024 * 1024  # 15 MB
 st.session_state.setdefault("security_events", [])
 st.session_state.setdefault("zip_last_entries", 0)
 st.session_state.setdefault("sandbox_files", 0)
+
+
+def run_sandbox_script(script_path: Path, success_message: str, event_text: str) -> None:
+    """Executa scripts de automação da VM e exibe feedback na UI."""
+    if not script_path.exists():
+        st.error(f"Script ausente: {script_path}. Configure a automação do VirtualBox.")
+        return
+    if not os.access(script_path, os.X_OK):
+        st.warning(f"Dê permissão de execução: chmod +x {script_path}")
+    try:
+        subprocess.run(["/bin/bash", str(script_path)], check=True)
+    except FileNotFoundError:
+        st.error("Bash não encontrado no sistema host.")
+        return
+    except subprocess.CalledProcessError as exc:
+        st.error(f"Falha ao executar {script_path.name}: {exc}")
+        return
+    st.success(success_message)
+    st.session_state.security_events.append(event_text)
+
+
+def clear_sandbox_queue() -> int:
+    """Remove arquivos salvos para a sandbox local."""
+    removed = 0
+    for entry in SANDBOX_QUEUE_DIR.iterdir():
+        try:
+            if entry.is_dir():
+                shutil.rmtree(entry)
+                removed += 1
+            else:
+                entry.unlink(missing_ok=True)  # type: ignore[arg-type]
+                removed += 1
+        except Exception as exc:
+            st.error(f"Erro ao remover {entry.name}: {exc}")
+    if removed:
+        st.session_state.sandbox_files = max(0, st.session_state.sandbox_files - removed)
+    return removed
 
 # CSS customizado para aparência Dark
 st.markdown(
@@ -978,6 +1021,35 @@ with col_b:
                 st.success(f"Arquivo guardado em {dest} — pronto para submissão ao ANY.RUN.")
                 st.session_state.security_events.append(f"Arquivo enviado à sandbox: {dest.name}")
                 st.session_state.sandbox_files += 1
+
+st.markdown("#### Controle da sandbox isolada (VirtualBox)")
+st.caption(
+    "Scripts em scripts/start_sandbox_vm.sh e scripts/stop_sandbox_vm.sh piloto automação com snapshot limpo, "
+    "rede NAT e montagem somente leitura de secure_uploads/sandbox_queue."
+)
+vm_col1, vm_col2, vm_col3 = st.columns(3)
+with vm_col1:
+    if st.button("Iniciar VM isolada", key="btn_vm_start"):
+        run_sandbox_script(
+            SANDBOX_START_SCRIPT,
+            "VM Linux endurecida iniciada com snapshot limpo.",
+            "Sandbox VM iniciada",
+        )
+with vm_col2:
+    if st.button("Encerrar VM isolada", key="btn_vm_stop"):
+        run_sandbox_script(
+            SANDBOX_STOP_SCRIPT,
+            "VM isolada desligada com segurança.",
+            "Sandbox VM parada",
+        )
+with vm_col3:
+    if st.button("Limpar fila local", key="btn_vm_purge"):
+        removed = clear_sandbox_queue()
+        if removed:
+            st.success(f"{removed} arquivo(s) removido(s) de secure_uploads/sandbox_queue.")
+            st.session_state.security_events.append("Fila sandbox higienizada")
+        else:
+            st.info("Nenhum arquivo para limpar.")
 
 # Limite estrito do cliente (defesa em profundidade)
 MAX_BYTES = 10 * 1024 * 1024  # 10 MB
