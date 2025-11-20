@@ -11,6 +11,7 @@ import importlib
 import io
 import os
 import secrets
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, cast
 
 import users as user_mgmt
@@ -22,6 +23,8 @@ from security import (
     session_manager,
     setup_secure_environment,
 )
+from utils.ai_helper import build_virtual_assistant_answer
+from utils.file_guard import analyze_url, safe_extract_zip
 from utils.mailer import send_phone_otp, send_verification_email
 from utils.password_strength import (
     check_password_strength,
@@ -160,6 +163,16 @@ st.set_page_config(
 if "setup_done" not in st.session_state:
     setup_secure_environment()
     st.session_state.setup_done = True
+
+SECURE_UPLOAD_ROOT = Path("secure_uploads")
+SECURE_UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+try:
+    os.chmod(SECURE_UPLOAD_ROOT, 0o700)
+except Exception:
+    pass
+
+st.session_state.setdefault("security_events", [])
+st.session_state.setdefault("zip_last_entries", 0)
 
 # CSS customizado para aparência Dark
 st.markdown(
@@ -821,6 +834,81 @@ uploaded_file = st.file_uploader(
     type=allowed_types,
     key="file_upload",
 )
+
+st.markdown("### 🛡️ Segurança Proativa")
+tab_link, tab_zip, tab_ai = st.tabs(
+    ["Verificar Link", "Processar ZIP", "Assistente IA"]
+)
+
+with tab_link:
+    suspect_url = st.text_input(
+        "Cole um link para inspeção",
+        placeholder="https://exemplo.com/arquivo",
+        key="security_link_input",
+    )
+    if st.button("Analisar link", key="btn_scan_link"):
+        if not suspect_url.strip():
+            st.warning("Informe um link antes de executar a análise.")
+        else:
+            report = analyze_url(suspect_url)
+            verdict = "seguro" if report["safe"] else "suspeito"
+            message = \
+                f"Hash {report['hash']} — domínio `{report['hostname'] or 'desconhecido'}` classificado como {verdict}."
+            if report["safe"]:
+                st.success(message)
+            else:
+                st.error(message)
+            for reason in report["reasons"]:
+                st.write(f"- {reason}")
+            st.session_state.security_events.append(
+                f"URL {'OK' if report['safe'] else 'bloqueada'}: {report['input']}"
+            )
+
+with tab_zip:
+    zip_file = st.file_uploader(
+        "Envie um pacote ZIP para verificação",
+        type=["zip"],
+        key="zip_guard_upload",
+        help="Arquivos são extraídos em sandbox e analisados antes de uso.",
+    )
+    if st.button("Validar ZIP", key="btn_zip_guard"):
+        if zip_file is None:
+            st.warning("Anexe um arquivo ZIP antes de validar.")
+        else:
+            try:
+                zip_bytes = zip_file.getvalue()
+                target_dir = SECURE_UPLOAD_ROOT / f"zip_{secrets.token_hex(4)}"
+                entries = safe_extract_zip(zip_bytes, target_dir)
+                st.success(
+                    f"ZIP inspecionado com sucesso — {len(entries)} arquivo(s) extraído(s) para `{target_dir}`"
+                )
+                st.session_state.security_events.append(
+                    f"ZIP seguro armazenado em {target_dir}"
+                )
+                st.session_state.zip_last_entries = len(entries)
+                for entry in entries:
+                    st.write(
+                        f"📄 `{entry['name']}` — {entry['bytes']} bytes"
+                        f" | {'texto' if entry['allowed'] else 'binário'}"
+                    )
+                    if entry.get("preview"):
+                        st.code(entry["preview"], language="text")
+            except Exception as zip_exc:
+                st.error(f"Falha ao validar ZIP: {zip_exc}")
+                st.session_state.security_events.append(
+                    f"ZIP rejeitado ({zip_exc})"
+                )
+
+with tab_ai:
+    st.caption("Assistente IA local — fornece apenas orientações de leitura.")
+    if st.button("🤖 Consultar IA", key="btn_ai_assistant"):
+        answer = build_virtual_assistant_answer(
+            events=st.session_state.security_events,
+            has_dataframe="current_df" in st.session_state,
+            binary_enabled=has_binary_access,
+            zip_entries=int(st.session_state.get("zip_last_entries", 0)),
+        )
+        st.info(answer)
 
 # Limite estrito do cliente (defesa em profundidade)
 MAX_BYTES = 10 * 1024 * 1024  # 10 MB

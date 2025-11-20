@@ -1,0 +1,2 @@
+# Dependências opcionais para verificações de segurança
+bandit==1.7.8

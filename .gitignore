@@ -83,3 +83,7 @@ Dockerfile
 security.log
 secure_uploads/
 logs/
+
+# Security artifacts
+.secure_users/
+security_reports/

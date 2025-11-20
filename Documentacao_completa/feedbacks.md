@@ -1,3 +1,4 @@
+
 # Feedbacks Rápidos do Projeto
 
 1. **Experiência do Usuário**
@@ -16,6 +17,11 @@
    - Centralizar logs (Elastic/CloudWatch) permitiria rastrear auditorias e facilitar investigações de incidentes.
    - Um painel simples com status dos jobs ETL pode ser exposto no Streamlit para facilitar o suporte.
 
-5. **Governança de Dados**
+5. **Segurança Proativa / IA**
+   - Integrar o botão "Assistente IA" ao manual de operação, reforçando que ele apenas guia e não executa ações.
+   - Expandir o scanner de links/ZIP para registrar indicadores em `security_events` e exportar relatórios periódicos.
+   - Automatizar a execução de `scripts/run_security_scans.sh` no pipeline (Bandit + Gitleaks) antes de cada release.
+
+6. **Governança de Dados**
    - Documentar o dicionário de dados dos arquivos CSV/BIN em `ETL_INTEGRATION_FEEDBACK.md` reduz tempo de onboarding.
    - Versionar transformações críticas (por exemplo, via `great_expectations`) garantiria confiabilidade nas cargas históricas.

@@ -90,6 +90,37 @@ streamlit run app.py
 | 📊 Logging | ✅ Ativa | Todos os eventos em `security.log` |
 | 🧹 Sanitização | ✅ Ativa | Remove caracteres perigosos |
 | ⏳ Timeout | ✅ Ativa | Sessão expira após 1 hora |
+| 🔍 Scans automatizados | ✅ Disponível | `scripts/run_security_scans.sh` executa Bandit e Gitleaks |
+
+### Monitoramento Automatizado
+
+1. Instale dependências de segurança:
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+2. Opcional: instale o binário do Gitleaks (Linux/Mac) em `PATH` conforme [releases oficiais](https://github.com/gitleaks/gitleaks/releases).
+3. Rode o script dedicado:
+   ```bash
+   ./scripts/run_security_scans.sh
+   ```
+4. Para integrar no CI, adicione uma etapa antes do build:
+   ```yaml
+   - name: Security Scan
+     run: |
+       pip install -r requirements-dev.txt
+       ./scripts/run_security_scans.sh
+   ```
+5. Relatórios serão salvos em `security_reports/` (ignorado pelo Git) para futura auditoria.
+
+### Rotação da Base Segura
+1. Gere uma nova senha mestre de no mínimo 32 caracteres (ex.: `openssl rand -base64 48`).
+2. Exporte temporariamente a variável `NEW_MASTER_PASSPHRASE` com essa senha ou digite interativamente.
+3. Execute o script dedicado:
+    ```bash
+    NEW_MASTER_PASSPHRASE='minha-senha-segura' \
+       ./.venv/bin/python scripts/rotate_secure_users.py
+    ```
+4. O script descriptografa `users.db.enc` com a chave anterior, recriptografa com a nova e atualiza `.secure_users/master.key` (pastas continuam fora do Git).
 
 ---
 
@@ -146,6 +177,8 @@ Projeto/
 4. 🔴 Configure firewall
 5. 🔴 Aumente rate limit se necessário
 6. 🔴 Monitore `security.log` regularmente
+7. 🔴 Restrinja e audite tráfego de saída: permita apenas `https://api.github.com` (deploy) e `https://www.duckdns.org` (duckdns_updater). Trafego extra deve passar por proxy com inspeção SSL/TLS e alertas.
+8. 🔴 Execute `scripts/run_security_scans.sh` no CI ou antes de cada release.
 
 ---
 
@@ -168,6 +201,7 @@ Leia `SECURITY.md` para:
 
 ❌ **NÃO FAÇA:**
 - Não commita `.secrets/` no Git
+- Não commita `.secure_users/` ou chaves mestres
 - Não use senhas padrão em produção
 - Não exponha `security.log`
 - Não use HTTP em produção
@@ -175,6 +209,7 @@ Leia `SECURITY.md` para:
 
 ✅ **FAÇA:**
 - Backup seguro de credenciais
+- Armazene `.secure_users/` em um cofre (Vault/KMS) e gere chave nova sempre que o repo for clonado
 - Revise logs regularmente
 - Atualize dependências Python
 - Use senhas fortes
