@@ -93,6 +93,14 @@ python etl.py --product caminho/produto.csv --date caminho/date.csv --output res
 - O app aceita upload de arquivos locais (ou arquivos arrastados) e processa no ambiente local — não envia dados a terceiros.
 - Os CSVs gerados estão em UTF-8, separador `,` (compatível com pandas e Excel/LibreOffice). Se preferir `;` altere o código em `aggregate_and_save`.
 
+## 🔐 Sandbox ANY.RUN
+
+- Abra o app em `streamlit run app.py` e localize o painel "Sandbox ANY.RUN".
+- Para **URLs suspeitas**, cole o link e clique em "Pré-verificar"; o app registra os indícios no log local e mantém o histórico em `security_events`.
+- Para **arquivos suspeitos** (ZIP, executáveis, documentos), utilize o botão "Armazenar para sandbox" — o arquivo é salvo em `secure_uploads/sandbox_queue` com permissões restritas e tamanho máximo de 15 MB.
+- Os dados ficam apenas na sua máquina; use os atalhos "Abrir trends oficiais" e "Abrir console ANY.RUN" para enviar manualmente o material ao serviço cloud quando desejar.
+- Recomenda-se revisar e excluir periodicamente os arquivos processados da pasta `secure_uploads/sandbox_queue` após concluir a análise externa.
+
 ## Próximos passos possíveis
 
 - Adicionar testes unitários simples para as funções de limpeza.

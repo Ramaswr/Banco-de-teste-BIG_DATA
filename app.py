@@ -11,6 +11,7 @@ import importlib
 import io
 import os
 import secrets
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, cast
 
@@ -171,8 +172,23 @@ try:
 except Exception:
     pass
 
+SANDBOX_QUEUE_DIR = SECURE_UPLOAD_ROOT / "sandbox_queue"
+SANDBOX_QUEUE_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    os.chmod(SANDBOX_QUEUE_DIR, 0o700)
+except Exception:
+    pass
+
+ANYRUN_PUBLIC_URL = "https://any.run/malware-trends/"
+ANYRUN_APP_URL = (
+    "https://app.any.run/?_gl=1*1vm9x5j*_ga*ODg2MzgyMDA3LjE3NjM2MTY1MjM.*_ga_53KB74YDZR*"
+    "czE3NjM2MTY1MjIkbzEkZzEkdDE3NjM2MTc2MDIkajIwJGwwJGgxMzMwNzIxMjM5#register"
+)
+MAX_SANDBOX_BYTES = 15 * 1024 * 1024  # 15 MB
+
 st.session_state.setdefault("security_events", [])
 st.session_state.setdefault("zip_last_entries", 0)
+st.session_state.setdefault("sandbox_files", 0)
 
 # CSS customizado para aparência Dark
 st.markdown(
@@ -909,6 +925,59 @@ with tab_ai:
             zip_entries=int(st.session_state.get("zip_last_entries", 0)),
         )
         st.info(answer)
+
+st.markdown("### 🧪 Sandbox ANY.RUN")
+st.info(
+    "Envie URLs ou arquivos suspeitos para quarentena local e abra o painel oficial do ANY.RUN para análise profunda. "
+    "Os dados permanecem na sua máquina; o upload para o serviço externo é opcional e manual."
+)
+
+col_a, col_b = st.columns(2)
+with col_a:
+    st.markdown("#### URL suspeita")
+    sandbox_url = st.text_input(
+        "Cole o link a ser investigado",
+        placeholder="https://exemplo.com/malware",
+        key="sandbox_url_input",
+    )
+    if st.button("Pré-verificar URL", key="btn_sandbox_url"):
+        if not sandbox_url.strip():
+            st.warning("Informe uma URL antes de validar.")
+        else:
+            report = analyze_url(sandbox_url)
+            verdict = "✅ Nenhum indicador crítico" if report["safe"] else "⚠️ Indicadores suspeitos"
+            st.write(verdict)
+            for reason in report["reasons"]:
+                st.write(f"- {reason}")
+            st.session_state.security_events.append(
+                f"Sandbox URL {'limpa' if report['safe'] else 'suspeita'}: {report['input']}"
+            )
+    st.markdown(
+        f"[Abrir trends oficiais]({ANYRUN_PUBLIC_URL}) · [Abrir console ANY.RUN]({ANYRUN_APP_URL})"
+    )
+
+with col_b:
+    st.markdown("#### Arquivo suspeito")
+    sandbox_file = st.file_uploader(
+        "Envie ZIP ou documento para quarentena",
+        type=["zip", "rar", "7z", "exe", "dll", "pdf", "docx", "xlsx"],
+        key="sandbox_file_uploader",
+        help="Os arquivos são salvos em secure_uploads/sandbox_queue para análise manual na sandbox.",
+    )
+    if st.button("Armazenar para sandbox", key="btn_save_sandbox"):
+        if sandbox_file is None:
+            st.warning("Selecione um arquivo antes de armazenar.")
+        else:
+            data = sandbox_file.getvalue()
+            if len(data) > MAX_SANDBOX_BYTES:
+                st.error("Arquivo maior que 15 MB — use a sandbox manualmente.")
+            else:
+                safe_name = Path(sandbox_file.name).name.replace(" ", "_")
+                dest = SANDBOX_QUEUE_DIR / f"sample_{int(time.time())}_{safe_name}"
+                dest.write_bytes(data)
+                st.success(f"Arquivo guardado em {dest} — pronto para submissão ao ANY.RUN.")
+                st.session_state.security_events.append(f"Arquivo enviado à sandbox: {dest.name}")
+                st.session_state.sandbox_files += 1
 
 # Limite estrito do cliente (defesa em profundidade)
 MAX_BYTES = 10 * 1024 * 1024  # 10 MB
