@@ -123,6 +123,15 @@ def file_info_str(key: FileInfoStrKey, default: str = "N/A") -> str:
     return default
 
 
+def get_report_reasons(report: Dict[str, Any]) -> List[str]:
+    reasons = report.get("reasons")
+    if isinstance(reasons, list):
+        return [str(reason) for reason in reasons]
+    if reasons is None:
+        return []
+    return [str(reasons)]
+
+
 def validate_uploaded_file(file_obj: Any, filename: str) -> tuple[bool, str]:
     """Proxy tipado para file_validator.validate_file."""
     validate_fn = cast(
@@ -184,7 +193,7 @@ except Exception:
 
 SANDBOX_START_SCRIPT = BASE_DIR / "scripts" / "start_sandbox_vm.sh"
 SANDBOX_STOP_SCRIPT = BASE_DIR / "scripts" / "stop_sandbox_vm.sh"
-SANDBOX_CONTACT_EMAIL = os.environ.get("SANDBOX_CONTACT_EMAIL", "analista@jerr.app")
+SANDBOX_CONTACT_EMAIL = os.environ.get("SANDBOX_CONTACT_EMAIL", "rama01rodriguez@duck.com")
 ROLE_LABELS = {
     "super_admin": "Senior (Root)",
     "senior": "Senior (Root)",
@@ -947,13 +956,14 @@ with tab_link:
         else:
             report = analyze_url(suspect_url)
             verdict = "seguro" if report["safe"] else "suspeito"
-            message = \
+            message = (
                 f"Hash {report['hash']} — domínio `{report['hostname'] or 'desconhecido'}` classificado como {verdict}."
+            )
             if report["safe"]:
                 st.success(message)
             else:
                 st.error(message)
-            for reason in report["reasons"]:
+            for reason in get_report_reasons(report):
                 st.write(f"- {reason}")
             st.session_state.security_events.append(
                 f"URL {'OK' if report['safe'] else 'bloqueada'}: {report['input']}"
