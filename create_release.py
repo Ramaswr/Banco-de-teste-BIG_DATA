@@ -34,7 +34,14 @@ Consulte RELEASE_NOTES.md para o changelog completo.
 """
 
 
-def create_release(token, owner, repo, tag, zip_file, notes_path=None):
+def create_release(
+    token: str,
+    owner: str,
+    repo: str,
+    tag: str,
+    zip_file: str,
+    notes_path: str | None = None,
+) -> None:
     """Criar release no GitHub com arquivo anexado."""
 
     if not os.path.exists(zip_file):
@@ -51,7 +58,7 @@ def create_release(token, owner, repo, tag, zip_file, notes_path=None):
     }
 
     # Dados da release
-    release_data = {
+    release_data: dict[str, str | bool] = {
         "tag_name": tag,
         "name": f"{tag} — Banco de teste BIG_DATA",
         "body": _load_body(tag, notes_path),
