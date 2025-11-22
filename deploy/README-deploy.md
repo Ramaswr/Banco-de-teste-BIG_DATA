@@ -8,6 +8,7 @@ A) Usar Caddy (recomendado, configura TLS automaticamente)
 B) Usar Nginx + Certbot (Let's Encrypt)
 
 Pré-requisitos:
+
 - Servidor com IP público e um domínio (ex.: `yourdomain.example`)
 - Entrada DNS `A` apontando para o IP do servidor
 - Acesso root (sudo) ao servidor para instalar serviços e colocar configs

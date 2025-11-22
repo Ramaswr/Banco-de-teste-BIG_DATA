@@ -210,6 +210,7 @@ ANYRUN_APP_URL = (
     "https://app.any.run/?_gl=1*1vm9x5j*_ga*ODg2MzgyMDA3LjE3NjM2MTY1MjM.*_ga_53KB74YDZR*"
     "czE3NjM2MTY1MjIkbzEkZzEkdDE3NjM2MTc2MDIkajIwJGwwJGgxMzMwNzIxMjM5#register"
 )
+# Strings acima ficam visíveis na tela e lembram o analista onde monitorar e onde acessar o painel oficial.
 MAX_SANDBOX_BYTES = 15 * 1024 * 1024  # 15 MB
 
 st.session_state.setdefault("security_events", [])
@@ -278,6 +279,7 @@ def sandbox_guard(action_desc: str) -> bool:
     return False
 
 # CSS customizado para aparência Dark
+# Mantemos comentários e nomes autoexplicativos para que cada tag/transição sirva como documentação visual
 st.markdown(
     """
 <style>
@@ -616,6 +618,7 @@ def login_page():
     with col2:
         st.markdown("### Credenciais de Acesso")
 
+        # Campos e botões exibem textos em português para guiar o usuário durante o login
         username = st.text_input("👤 Usuário", key="login_user")
         password = st.text_input("🔑 Senha", type="password", key="login_pass")
 
@@ -642,6 +645,7 @@ def login_page():
                 st.warning("⚠️ Preencha usuário e senha")
 
     # ---------- Formulário de Registro (simples, amigável) ----------
+    # Expansões abaixo funcionam como documentação viva explicando o que acontece em cada ação de cadastro/verificação
     with st.expander("Criar nova conta", expanded=False):
         st.info(
             "Crie uma conta local — os dados ficam armazenados localmente em `.secrets/users.db`"
@@ -779,6 +783,7 @@ if not username:
     st.rerun()
 
 # ==================== CABEÇALHO ====================
+# Bloco abaixo introduz o painel com textos descritivos usados como mini documentação
 st.markdown(
     """
 <div class='dashboard-header'>
@@ -826,6 +831,7 @@ with col_logout:
         st.success("Logout realizado com sucesso!")
         st.rerun()
 
+# Banner exibido para lembrar o leitor (e usuário) das camadas de proteção ativas
 st.markdown(
     """
 <div class='security-banner'>
@@ -836,6 +842,7 @@ st.markdown(
 )
 
 # ==================== PAINEL DE CONTROLE ====================
+# Texto e ícones exibidos aqui servem como guia visual (status ATIVO/INATIVO) para o operador.
 st.markdown("<div class='control-panel'>", unsafe_allow_html=True)
 
 col_status, col_btn_start, col_btn_stop = st.columns([2, 1, 1])
@@ -868,6 +875,7 @@ if not st.session_state.app_active:
     st.stop()
 
 # ==================== BARRA LATERAL - CONFIGURAÇÕES ====================
+# Sidebar mostra textos curtos em português para orientar sobre formato, separador, encoding
 st.sidebar.title("⚙️ Configurações")
 user_role = st.session_state.get("user_role", "user")
 has_binary_access = user_role in {"admin", "super_admin"}
@@ -909,6 +917,7 @@ if has_binary_access:
     )
 
 # ==================== SEÇÃO PRINCIPAL ====================
+# Cabeçalhos/strings abaixo descrevem cada etapa do fluxo de upload; mantemos em português para auto documentação.
 st.markdown("## 📁 Carregar Arquivo")
 
 if has_binary_access:
@@ -939,6 +948,7 @@ uploaded_file = st.file_uploader(
     key="file_upload",
 )
 
+# Esta chamada resume, em português, o que cada aba faz (link, ZIP, IA) — funcionando como manual embutido
 st.markdown("### 🛡️ Segurança Proativa")
 tab_link, tab_zip, tab_ai = st.tabs(
     ["Verificar Link", "Processar ZIP", "Assistente IA"]
@@ -1015,6 +1025,7 @@ with tab_ai:
         )
         st.info(answer)
 
+# Título e texto desta seção explicam em português como usar a sandbox/ANY.RUN
 st.markdown("### 🧪 Sandbox ANY.RUN")
 st.info(
     "Envie URLs ou arquivos suspeitos para quarentena local e abra o painel oficial do ANY.RUN para análise profunda. "
@@ -1028,6 +1039,7 @@ if not has_sandbox_access():
 
 col_a, col_b = st.columns(2)
 with col_a:
+    # Etiquetas das entradas servem como guia passo a passo (URL suspeita -> pré-verificação)
     st.markdown("#### URL suspeita")
     sandbox_url = st.text_input(
         "Cole o link a ser investigado",
@@ -1053,6 +1065,7 @@ with col_a:
     )
 
 with col_b:
+    # Segundo bloco documenta o fluxo de upload para quarentena local
     st.markdown("#### Arquivo suspeito")
     sandbox_file = st.file_uploader(
         "Envie ZIP ou documento para quarentena",
@@ -1077,6 +1090,7 @@ with col_b:
                 st.session_state.security_events.append(f"Arquivo enviado à sandbox: {dest.name}")
                 st.session_state.sandbox_files += 1
 
+# Texto abaixo explica claramente a automação da VM, servindo como lembrete de quais scripts executar
 st.markdown("#### Controle da sandbox isolada (VirtualBox)")
 st.caption(
     "Scripts em scripts/start_sandbox_vm.sh e scripts/stop_sandbox_vm.sh piloto automação com snapshot limpo, "
@@ -1327,6 +1341,7 @@ if uploaded_file is not None:
 # ==================== PREVIEW E DETALHES ====================
 if st.session_state.current_df is not None:
     st.markdown("---")
+    # Esta seção apresenta legendas/strings autoexplicativas sobre métricas, tabs e downloads
     st.markdown("## 📋 Visualização de Dados")
 
     # Informações do arquivo
@@ -1410,6 +1425,7 @@ if st.session_state.current_df is not None:
             )
 
     with tab5:
+        # Texto explica o que cada botão faz (limpeza x agregação) – útil para quem lê o código
         st.markdown("### Processamento ETL")
         st.info("Execute a limpeza e agregação de dados de vendas (produto/data)")
 
@@ -1440,6 +1456,7 @@ if st.session_state.current_df is not None:
                     st.error(f"❌ Erro na agregação: {str(e)}")
 
 st.markdown("---")
+# Mensagens finais funcionam como documentação embutida, reforçando políticas e contatos em português
 st.markdown(
     "**🔒 Privacidade:** Todos os dados são processados localmente. Nenhum arquivo é enviado para servidores remotos."
 )
