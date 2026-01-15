@@ -37,6 +37,8 @@ def read_sales_csv(
                 return df
             except Exception as e:
                 last_err = e
+        if last_err is None:
+            raise RuntimeError("Failed to read CSV from buffer with given encodings")
         raise last_err
     else:
         for enc in encoding_candidates:
@@ -46,6 +48,8 @@ def read_sales_csv(
                 return df
             except Exception as e:
                 last_err = e
+        if last_err is None:
+            raise RuntimeError("Failed to read CSV from path_or_buf with given encodings")
         raise last_err
 
 

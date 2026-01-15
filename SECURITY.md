@@ -9,7 +9,8 @@ Este projeto implementa múltiplas camadas de segurança para proteger contra ac
 ## 1️⃣ Autenticação
 
 ### Credenciais Padrão (DEMO)
-```
+
+```text
 👤 Username: admin
 🔑 Senha: admin123
 
@@ -37,9 +38,11 @@ As senhas são hashadas com **PBKDF2-SHA256** com 100.000 iterações.
 ## 2️⃣ Validação de Arquivos
 
 ### Tipos Permitidos
+
 - CSV, TXT, XLSX, XLS, Parquet, JSON, TSV
 
 ### Proteções
+
 ✅ Verificação de extensão de arquivo
 ✅ Limite de tamanho: 100 MB
 ✅ Validação de assinatura (magic bytes)
@@ -48,6 +51,7 @@ As senhas são hashadas com **PBKDF2-SHA256** com 100.000 iterações.
 ✅ Isolamento em diretório seguro (`secure_uploads/`)
 
 ### Arquivos Rejeitados
+
 - Extensões perigosas (.exe, .sh, .bat, .dll)
 - Tamanho > 100 MB
 - Magic bytes inválidos (arquivo falsificado)
@@ -58,12 +62,14 @@ As senhas são hashadas com **PBKDF2-SHA256** com 100.000 iterações.
 ## 3️⃣ Rate Limiting
 
 ### Proteção contra Brute Force
+
 - **Limite:** 30 requisições por minuto (por usuário/IP)
 - **Timeout:** 60 segundos
 - **Ação:** Bloqueia requisições excedentes
 
 ### Exemplo
-```
+
+```text
 Tentativa 1-30: ✅ Aceito
 Tentativa 31: ❌ Bloqueado
 (Aguarde 1 minuto)
@@ -74,11 +80,13 @@ Tentativa 31: ❌ Bloqueado
 ## 4️⃣ Gerenciamento de Sessão
 
 ### Timeout
+
 - **Duração:** 1 hora (3.600 segundos)
 - **Ação:** Logout automático após expiração
 - **ID de Sessão:** Token único de 32 caracteres (secrets.token_urlsafe)
 
 ### Segurança de Sessão
+
 - Tokens criptograficamente aleatórios
 - Sem reutilização de tokens
 - Destruição ao logout
@@ -88,9 +96,10 @@ Tentativa 31: ❌ Bloqueado
 ## 5️⃣ Logging e Auditoria
 
 ### Arquivo: `security.log`
+
 Todos os eventos de segurança são registrados:
 
-```
+```text
 2025-11-12 10:30:45 - Login bem-sucedido: admin
 2025-11-12 10:31:15 - Arquivo validado: dados_1234567890.csv (5.2 MB)
 2025-11-12 10:32:00 - Rate limit atingido para: 192.168.1.100
@@ -98,6 +107,7 @@ Todos os eventos de segurança são registrados:
 ```
 
 ### Como Revisar Logs
+
 ```bash
 # Últimas 20 linhas
 tail -20 security.log
@@ -116,23 +126,29 @@ grep "Rate limit" security.log
 ### Proteção contra Injeção
 
 #### SQL Injection
+
 Caracteres perigosos removidos:
+
 - `'`, `"`, `;`, `--`, `/*`, `*/`
 - `DROP`, `DELETE`, `INSERT`
 
 #### Command Injection
+
 Caracteres perigosos removidos:
+
 - `;`, `|`, `&`, `$`, `` ` ``, `\n`
 
 #### Path Traversal
+
 Caracteres perigosos removidos:
+
 - `..`, `//`
 
 ---
 
 ## 7️⃣ Estrutura de Diretórios Segura
 
-```
+```text
 Projeto/
 ├── app.py                 # Aplicação principal
 ├── security.py            # Módulo de segurança
@@ -145,6 +161,7 @@ Projeto/
 ```
 
 ### Permissões
+
 ```bash
 # Visualizar permissões
 ls -lah .secrets/
@@ -175,25 +192,33 @@ Antes de colocar em produção, verifique:
 ## 🔧 Configuração Avançada
 
 ### Aumentar Rate Limit
+
 Em `app.py`, modifique:
+
 ```python
 rate_limiter = RateLimiter(max_requests=100, time_window=60)
 ```
 
 ### Aumentar Timeout de Sessão
+
 Em `app.py`:
+
 ```python
 session_manager = SessionManager(timeout=7200)  # 2 horas
 ```
 
 ### Alterar Limite de Tamanho de Arquivo
+
 Em `security.py`:
+
 ```python
 MAX_FILE_SIZE = 200 * 1024 * 1024  # 200 MB
 ```
 
 ### Adicionar Tipo de Arquivo Permitido
+
 Em `security.py`:
+
 ```python
 ALLOWED_EXTENSIONS = {'csv', 'txt', 'xlsx', 'xls', 'parquet', 'json', 'tsv', 'pdf'}
 ```
@@ -203,6 +228,7 @@ ALLOWED_EXTENSIONS = {'csv', 'txt', 'xlsx', 'xls', 'parquet', 'json', 'tsv', 'pd
 ## ⚠️ Avisos de Segurança
 
 ### NÃO FAÇA
+
 ❌ Não commita `.secrets/` no Git
 ❌ Não expõe `security.log` publicamente
 ❌ Não use HTTP em produção
@@ -211,6 +237,7 @@ ALLOWED_EXTENSIONS = {'csv', 'txt', 'xlsx', 'xls', 'parquet', 'json', 'tsv', 'pd
 ❌ Não deixe credenciais padrão em produção
 
 ### FAÇA
+
 ✅ Faça backup seguro de credenciais
 ✅ Revise logs regularmente
 ✅ Atualize dependências Python regularmente
@@ -224,6 +251,7 @@ ALLOWED_EXTENSIONS = {'csv', 'txt', 'xlsx', 'xls', 'parquet', 'json', 'tsv', 'pd
 ## 🆘 Resposta a Incidentes
 
 ### 1. Suspeita de Acesso Não Autorizado
+
 ```bash
 # Revise os últimos acessos
 grep "Login" security.log | tail -20
@@ -236,14 +264,18 @@ ls -lah secure_uploads/
 ```
 
 ### 2. Ataque de Brute Force
+
 O sistema bloqueia automaticamente:
+
 ```bash
 # Verificar bloqueios
 grep "Rate limit" security.log | tail -10
 ```
 
 ### 3. Upload de Arquivo Malicioso
+
 O arquivo é rejeitado automaticamente:
+
 ```bash
 # Verificar rejeições
 grep "Arquivo rejeitado" security.log
@@ -253,15 +285,16 @@ grep "Arquivo rejeitado" security.log
 
 ## 📚 Recursos Adicionais
 
-- **OWASP Top 10:** https://owasp.org/www-project-top-ten/
-- **Python Security:** https://python-security.readthedocs.io/
-- **Streamlit Security:** https://docs.streamlit.io/knowledge-base/using-streamlit/deploy
+- **OWASP Top 10:** <https://owasp.org/www-project-top-ten/>
+- **Python Security:** <https://python-security.readthedocs.io/>
+- **Streamlit Security:** <https://docs.streamlit.io/knowledge-base/using-streamlit/deploy>
 
 ---
 
 ## 📞 Suporte
 
 Para questões de segurança:
+
 1. Revise este arquivo
 2. Consulte os logs em `security.log`
 3. Teste as proteções localmente

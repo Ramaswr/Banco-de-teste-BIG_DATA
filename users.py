@@ -3,6 +3,7 @@ import os
 import sqlite3
 import time
 from typing import Any, Dict, Optional
+import re
 
 DB_DIR = os.path.join(".secrets")
 DB_PATH = os.path.join(DB_DIR, "users.db")
@@ -42,12 +43,34 @@ def _init_db():
     )
     conn.commit()
     conn.close()
+    try:
+        os.chmod(DB_PATH, 0o600)
+    except Exception:
+        pass
 
 
 def _hash_password(password: str, iterations: int = 100000) -> str:
     salt = os.urandom(32)
     dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
     return f"pbkdf2:{iterations}:{salt.hex()}:{dk.hex()}"
+
+
+def _is_strong_password(password: str) -> bool:
+    """Verifica requisitos mínimos de senha:
+    - mínimo 12 caracteres
+    - ao menos uma letra maiúscula, uma minúscula, um dígito e um caractere especial
+    """
+    if not password or len(password) < 12:
+        return False
+    if not re.search(r"[A-Z]", password):
+        return False
+    if not re.search(r"[a-z]", password):
+        return False
+    if not re.search(r"[0-9]", password):
+        return False
+    if not re.search(r"[^A-Za-z0-9]", password):
+        return False
+    return True
 
 
 def _verify_hash(stored: str, candidate: str) -> bool:
@@ -86,6 +109,12 @@ def create_user(
     """Create a user. Provide either `password` (plain) or `password_hash` (precomputed pbkdf2 string)."""
     if not (password or password_hash):
         raise ValueError("password or password_hash required")
+    # Enforce password strength when plain password provided
+    if password:
+        if not _is_strong_password(password):
+            raise ValueError(
+                "password does not meet complexity requirements: min 12 chars, upper, lower, digit, special"
+            )
     if password:
         password_hash = _hash_password(password)
 

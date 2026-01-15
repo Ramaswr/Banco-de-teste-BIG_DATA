@@ -1,8 +1,6 @@
-## HEAD
-# Banco-de-teste-BIG_DATA
+# Banco de teste BIG_DATA
+
 ## "Repositório de testes para ETL e análises — Banco de teste BIG_DATA"
-=======
-# Banco de teste BIG_DATA
 
 ![Logo do Banco de teste BIG_DATA](assets/logo.svg)
 
@@ -13,24 +11,10 @@ Pequeno projeto para rodar o ETL que você enviou, sem dependências do Google C
 - `requirements.txt` — dependências mínimas.
 
 ```bash
-python etl.py --product caminho/produto.csv --date caminho/date.csv --output resultados
-# Banco de teste BIG_DATA
-
-![Logo do Banco de teste BIG_DATA](assets/logo.svg)
-
-Pequeno projeto para rodar o ETL que você enviou, sem dependências do Google Colab. Inclui:
-
-- `etl.py` — script CLI com funções de leitura, limpeza e agregação; gera CSVs de saída.
-- `app.py` — app web em Streamlit para upload dos arquivos, execução do ETL e download dos CSVs gerados.
-- `requirements.txt` — dependências mínimas.
-
-Como usar
-
-1) Criar e ativar um ambiente virtual (recomendado):
+python [etl.py](http://_vscodecontentref_/0) --product caminho/produto.csv --date caminho/date.csv --output resultados
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+1) Criar e ativar o ambiente virtual:
 ```
 
 2) Instalar dependências:

@@ -7,3 +7,4 @@ openpyxl
 pyarrow
 pydantic
 cryptography
+pdfplumber
