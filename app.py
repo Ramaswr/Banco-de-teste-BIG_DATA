@@ -19,6 +19,10 @@ from security import (
     rate_limiter,
     session_manager,
     setup_secure_environment,
+    logger,
+    is_locked,
+    register_failed_attempt,
+    reset_attempts,
 )
 
 # Importar dependências
@@ -43,7 +47,40 @@ except Exception:
     plt = None
 
 try:
-    from etl import aggregate_and_save, clean_date_df, clean_product_df, read_sales_csv
+    import etl as etl_module
+
+    # Bind known functions from etl (with safe fallbacks) and wrap aggregate_and_save
+    read_sales_csv = getattr(
+        etl_module, "read_sales_csv", lambda file_obj, sep=",": pd.read_csv(file_obj, sep=sep)
+    )
+    clean_product_df = getattr(etl_module, "clean_product_df", lambda df: df)
+    clean_date_df = getattr(etl_module, "clean_date_df", lambda df: df)
+
+    def aggregate_and_save(df_prod=None, df_date=None, output_folder="streamlit_output", save_prefix=""):
+        """
+        Wrapper around etl_module.aggregate_and_save that normalizes different return shapes:
+        - If underlying function returns (dict, dict), convert the first element to a list of paths/keys.
+        - If it returns (list, dict), return as-is.
+        """
+        if not hasattr(etl_module, "aggregate_and_save"):
+            return [], {}
+        res = etl_module.aggregate_and_save(
+            df_prod=df_prod, df_date=df_date, output_folder=output_folder, save_prefix=save_prefix
+        )
+        try:
+            out0, out1 = res
+        except Exception:
+            return [], {}
+        # If first element is a dict, convert to a list (prefer string values as file paths)
+        if isinstance(out0, dict):
+            try:
+                values = [v for v in out0.values() if isinstance(v, str)]
+                out_paths = values if values else list(out0.keys())
+            except Exception:
+                out_paths = list(out0)
+            return out_paths, out1
+        return out0, out1
+
 except Exception:
     # Fallbacks
     def read_sales_csv(file_obj, sep=","):
@@ -55,10 +92,33 @@ except Exception:
     def clean_date_df(df):
         return df
 
-    def aggregate_and_save(
+    def aggregate_and_save_fallback(
         df_prod=None, df_date=None, output_folder="streamlit_output", save_prefix=""
     ):
         return [], {}
+
+    # Assign fallback implementation to aggregate_and_save name when ETL import fails
+    aggregate_and_save = aggregate_and_save_fallback
+
+
+def _sanitize_cell_for_csv(val):
+    """Mitiga CSV/Formula injection: prefixa ' para células perigosas."""
+    try:
+        if isinstance(val, str) and val and val[0] in ("=", "+", "-", "@"):
+            return "'" + val
+    except Exception:
+        pass
+    return val
+
+
+def sanitize_dataframe_for_export(df):
+    """Sanitiza df de strings para export (CSV/Excel/Parquet)."""
+    try:
+        return df.applymap(lambda x: _sanitize_cell_for_csv(x) if isinstance(x, str) else x)
+    except Exception:
+        # fallback: retornar df inalterado mas logar
+        logger.exception("Falha ao sanitizar dataframe para export")
+        return df
 
 
 # ==================== CONFIGURAÇÃO ====================
@@ -114,23 +174,35 @@ def login_page():
 
         # Rate limiting por IP (usando session como proxy)
         session_id = st.session_state.get("session_id", "guest")
+        # Verificar lock persistente por session ou por username
+        if is_locked(session_id):
+            st.error("❌ Acesso temporariamente bloqueado. Tente novamente mais tarde.")
+            st.stop()
         if not rate_limiter.is_allowed(session_id):
             st.error("❌ Muitas tentativas de login. Tente novamente mais tarde.")
             st.stop()
 
         if st.button("🔓 Entrar", use_container_width=True, key="btn_login"):
-            if username and password:
-                if credentials.authenticate(username, password):
-                    # Criar sessão
-                    session_id = session_manager.create_session(username)
-                    st.session_state.session_id = session_id
-                    st.session_state.authenticated = True
-                    st.session_state.username = username
-                    st.success(f"Sejam bem-vindo a Jerr_BIG-DATE, {username}!")
-                    st.rerun()
+                if username and password:
+                    if is_locked(username):
+                        st.error("❌ Conta temporariamente bloqueada. Consulte os administradores.")
+                    elif credentials.authenticate(username, password):
+                        # sucesso: resetar tentativas e criar sessão
+                        reset_attempts(username)
+                        reset_attempts(session_id)
+                        session_id = session_manager.create_session(username)
+                        st.session_state.session_id = session_id
+                        st.session_state.authenticated = True
+                        st.session_state.username = username
+                        st.success(f"Sejam bem-vindo a Jerr_BIG-DATE, {username}!")
+                        st.rerun()
+                    else:
+                        # registrar falha persistente
+                        register_failed_attempt(username)
+                        register_failed_attempt(session_id)
+                        st.error("❌ Usuário ou senha incorretos")
                 else:
-                    st.error("❌ Usuário ou senha incorretos")
-                    rate_limiter.is_allowed(session_id)  # Contar tentativa falha
+                    st.warning("⚠️ Preencha usuário e senha")
             else:
                 st.warning("⚠️ Preencha usuário e senha")
 
@@ -171,7 +243,7 @@ def login_page():
 
     st.markdown("---")
     st.info(
-        "**Demo Credentials:**\n- Username: `admin` | Password: `admin123`\n- Username: `usuario` | Password: `senha123`\n\n⚠️ **ALTERE ESTAS CREDENCIAIS EM PRODUÇÃO!**"
+           "Configure credenciais em `.secrets/credentials.json` antes de usar em produção. Não deixe credenciais padrão."
     )
     st.markdown("🔒 Todos os acessos são registrados em `security.log`")
 
@@ -218,9 +290,15 @@ with col_user:
     st.markdown(f"👤 **Usuário:** {st.session_state.username}")
     # Mostrar badge de apoiador PIX no canto superior do perfil (se configurado)
     try:
-        meta = credentials.get_user_metadata(st.session_state.username)
-        pix_key = meta.get("pix_key")
-        role = meta.get("role")
+        # Use a validated username (prefer the session-validated local variable, fallback to session_state)
+        user_for_meta = username if isinstance(username, str) and username else st.session_state.get("username")
+        if user_for_meta and isinstance(user_for_meta, str):
+            meta = credentials.get_user_metadata(user_for_meta)
+            pix_key = meta.get("pix_key")
+            role = meta.get("role")
+        else:
+            pix_key = None
+            role = "user"
     except Exception:
         pix_key = None
         role = "user"
@@ -393,7 +471,7 @@ if uploaded_file is not None:
 
                 st.session_state.current_df = df
                 st.session_state.file_info = {
-                    "name": uploaded_file.name,
+                    "name": safe_filename,
                     "size": len(df),
                     "columns": len(df.columns),
                     "format": file_format,
@@ -402,15 +480,21 @@ if uploaded_file is not None:
                 st.success("✅ Arquivo carregado com sucesso!")
 
             except Exception as e:
-                st.error(f"❌ Erro ao carregar: {str(e)}")
+                logger.exception("Erro ao carregar arquivo")
+                st.error("❌ Erro interno ao carregar o arquivo. Consulte os logs.")
                 # Se falhar na leitura e o usuário for super_admin, oferecer OCR/PDF processing
                 try:
-                    meta = credentials.get_user_metadata(st.session_state.username)
+                    # Use a validated username (prefer the session-validated local variable, fallback to session_state)
+                    user_for_meta = username if isinstance(username, str) and username else st.session_state.get("username")
+                    if isinstance(user_for_meta, str) and user_for_meta:
+                        meta = credentials.get_user_metadata(user_for_meta)
+                    else:
+                        meta = {}
                     if meta.get("role") == "super_admin":
                         st.info("Tentando processamento OCR/PDF para super admin...")
                         try:
                             upload_dir = os.path.join(
-                                "secure_uploads", st.session_state.username
+                                "secure_uploads", user_for_meta if isinstance(user_for_meta, str) else "unknown"
                             )
                             os.makedirs(upload_dir, exist_ok=True)
                             csvs = []
@@ -419,7 +503,7 @@ if uploaded_file is not None:
                                 csvs = pdf_to_tables_csv(
                                     uploaded_file,
                                     upload_dir,
-                                    prefix=st.session_state.username,
+                                    prefix=user_for_meta if isinstance(user_for_meta, str) else ""
                                 )
                             except Exception:
                                 # tentar OCR de imagem para texto simples
@@ -427,7 +511,7 @@ if uploaded_file is not None:
                                     uploaded_file.seek(0)
                                     txt = image_to_text(uploaded_file)
                                     path = save_text_as_csv_for_user(
-                                        st.session_state.username,
+                                        user_for_meta if isinstance(user_for_meta, str) else None,
                                         txt,
                                         out_dir="secure_uploads",
                                     )
@@ -436,10 +520,11 @@ if uploaded_file is not None:
                                     st.error(f"❌ OCR falhou: {e2}")
                             if csvs:
                                 st.success(
-                                    f"✅ Conversão concluída: {len(csvs)} arquivos gerados em secure_uploads/{st.session_state.username}"
+                                    f"✅ Conversão concluída: {len(csvs)} arquivos gerados em secure_uploads/{user_for_meta}"
                                 )
-                        except Exception as e3:
-                            st.error(f"❌ Erro no processamento OCR: {e3}")
+                            except Exception as e3:
+                                logger.exception("Erro no processamento OCR")
+                                st.error("❌ Erro interno no processamento OCR. Consulte os logs.")
                 except Exception:
                     pass
 
@@ -456,7 +541,8 @@ if uploaded_file is not None:
                     st.session_state.current_df = df
                     st.success("✅ Dados limpos!")
                 except Exception as e:
-                    st.error(f"❌ Erro na limpeza: {str(e)}")
+                    logger.exception("Erro na limpeza de dados")
+                    st.error("❌ Erro interno na limpeza de dados. Consulte os logs.")
             else:
                 st.warning("⚠️ Carregue um arquivo primeiro.")
 
@@ -515,38 +601,48 @@ if st.session_state.current_df is not None:
         col_csv, col_excel, col_parquet = st.columns(3)
 
         with col_csv:
-            csv_buffer = st.session_state.current_df.to_csv(index=False).encode("utf-8")
+            df_export = sanitize_dataframe_for_export(st.session_state.current_df.copy())
+            csv_buffer = df_export.to_csv(index=False).encode("utf-8")
+            safe_name = str(st.session_state.file_info.get("name", "export")).replace("/", "_")
             st.download_button(
                 "📥 CSV",
                 data=csv_buffer,
-                file_name=f'dados_{st.session_state.file_info.get("name", "export")}.csv',
+                file_name=f'dados_{safe_name}.csv',
                 mime="text/csv",
                 use_container_width=True,
             )
 
         with col_excel:
             buffer = io.BytesIO()
-            st.session_state.current_df.to_excel(buffer, index=False)
+            df_export = sanitize_dataframe_for_export(st.session_state.current_df.copy())
+            df_export.to_excel(buffer, index=False)
             buffer.seek(0)
+            safe_name = str(st.session_state.file_info.get("name", "export")).replace("/", "_")
             st.download_button(
                 "📥 Excel",
                 data=buffer,
-                file_name=f'dados_{st.session_state.file_info.get("name", "export")}.xlsx',
+                file_name=f'dados_{safe_name}.xlsx',
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
 
         with col_parquet:
             parquet_buffer = io.BytesIO()
-            st.session_state.current_df.to_parquet(parquet_buffer, index=False)
-            parquet_buffer.seek(0)
-            st.download_button(
-                "📥 Parquet",
-                data=parquet_buffer,
-                file_name=f'dados_{st.session_state.file_info.get("name", "export")}.parquet',
-                mime="application/octet-stream",
-                use_container_width=True,
-            )
+            df_export = sanitize_dataframe_for_export(st.session_state.current_df.copy())
+            try:
+                df_export.to_parquet(parquet_buffer, index=False)
+                parquet_buffer.seek(0)
+                safe_name = str(st.session_state.file_info.get("name", "export")).replace("/", "_")
+                st.download_button(
+                    "📥 Parquet",
+                    data=parquet_buffer,
+                    file_name=f'dados_{safe_name}.parquet',
+                    mime="application/octet-stream",
+                    use_container_width=True,
+                )
+            except Exception:
+                logger.exception("Falha ao gerar Parquet para download")
+                st.warning("Exportar Parquet não disponível neste ambiente")
 
     with tab5:
         st.markdown("### Processamento ETL")
@@ -562,7 +658,8 @@ if st.session_state.current_df is not None:
                     st.success("✅ Limpeza ETL aplicada!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"❌ Erro no ETL: {str(e)}")
+                    logger.exception("Erro no ETL - limpeza")
+                    st.error("❌ Erro interno no ETL. Consulte os logs.")
 
         with col_etl2:
             if st.button("📊 Aplicar ETL - Agregação", use_container_width=True):
@@ -576,7 +673,8 @@ if st.session_state.current_df is not None:
                         for key, val in reports.items():
                             st.write(f"**{key}**: {len(val)} registros")
                 except Exception as e:
-                    st.error(f"❌ Erro na agregação: {str(e)}")
+                    logger.exception("Erro na agregação ETL")
+                    st.error("❌ Erro interno na agregação. Consulte os logs.")
 
 st.markdown("---")
 st.markdown(
