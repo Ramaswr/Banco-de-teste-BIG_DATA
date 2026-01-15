@@ -5,15 +5,17 @@ Streamlit app para upload dos CSVs e execução do ETL.
 - Permite baixar os CSVs resultantes
 """
 
+import importlib
+
 try:
-    import importlib
     import importlib.util
     import sys
     import types
+    from typing import Any, Callable, cast
 
     # Se pandas não estiver instalado, insere um stub mínimo em sys.modules
     if importlib.util.find_spec("pandas") is None:
-        mod = types.ModuleType("pandas")
+        mod: Any = types.ModuleType("pandas")
 
         def _missing(*a, **k):
             raise ModuleNotFoundError(
@@ -21,9 +23,15 @@ try:
             )
 
         # funções/objetos usados no app -> lançam erro informativo ao serem chamados
-        mod.read_csv = _missing
-        mod.DataFrame = type("DataFrameStub", (), {})  # placeholder leve
-        mod.__getattr__ = lambda name: _missing()
+        setattr(mod, "read_csv", _missing)
+        setattr(mod, "DataFrame", type("DataFrameStub", (), {}))  # placeholder leve
+
+        def __getattr__(name):
+            raise ModuleNotFoundError(
+                "pandas não encontrado. Instale via 'pip install pandas' para executar o ETL."
+            )
+
+        setattr(mod, "__getattr__", __getattr__)
         sys.modules["pandas"] = mod
 
     # Importa streamlit (se não existir, gera exceção para cair no except e usar o stub de UI)
@@ -83,7 +91,8 @@ except Exception:
             pass
 
         def download_button(self, *a, **k):
-            pass
+            # retornar False para compatibilidade com comportamento interativo esperado
+            return False
 
         def error(self, *a, **k):
             pass
@@ -91,51 +100,137 @@ except Exception:
     st = _Stub()
 
 try:
-    import importlib
-
+    # importlib já importado acima
+ 
     try:
         pd = importlib.import_module("pandas")
     except Exception:
         pd = None
 
     try:
-        from etl import (
-            aggregate_and_save,
-            clean_date_df,
-            clean_product_df,
-            read_sales_csv,
-            run_etl,
-        )
+        # Import the etl module itself and adapt read_sales_csv to a stable local signature.
+        etl_mod = importlib.import_module("etl")
     except Exception:
+        etl_mod = None
+
+    if etl_mod is not None:
+        import typing
+        def _missing_aggregate_and_save(df_prod=None, df_date=None, output_folder="output", save_prefix=""):
+            return {}, {}
+        aggregate_and_save: typing.Callable[..., tuple[dict[typing.Any, typing.Any], dict[typing.Any, typing.Any]]] = typing.cast(
+            typing.Callable[..., tuple[dict[typing.Any, typing.Any], dict[typing.Any, typing.Any]]],
+            getattr(etl_mod, "aggregate_and_save", _missing_aggregate_and_save),
+        )
+        def _missing_clean(df):
+            return df
+        _clean_date_df = typing.cast(
+            typing.Callable[..., typing.Any],
+            getattr(etl_mod, "clean_date_df", _missing_clean),
+        )
+        _clean_product_df = typing.cast(
+            typing.Callable[..., typing.Any],
+            getattr(etl_mod, "clean_product_df", _missing_clean),
+        )
+        clean_date_df = _clean_date_df
+        clean_product_df = _clean_product_df
+        def _missing_run_etl(*a, **k):
+            raise ModuleNotFoundError("run_etl não disponível no etl")
+        run_etl_mod: typing.Callable[..., typing.Any] = typing.cast(
+            typing.Callable[..., typing.Any],
+            getattr(etl_mod, "run_etl", _missing_run_etl),
+        )
+
+        # If etl exposes a read_sales_csv, wrap it so the local function has the expected parameter names/signature.
+        if hasattr(etl_mod, "read_sales_csv"):
+            _etl_read = etl_mod.read_sales_csv
+
+            def _read_sales_csv_wrapper(file_obj, sep=","):
+                """Wrapper robusto: tenta passar file_obj direto; se falhar e for file-like,
+                grava temporariamente e passa caminho para função do etl."""
+                try:
+                    # tenta usar diretamente (muitos leitores aceitam file-like ou path)
+                    return _etl_read(file_obj, sep=sep)
+                except Exception:
+                    # se for file-like, tente salvar em arquivo temporário e chamar por caminho
+                    if hasattr(file_obj, "read"):
+                        import tempfile
+                        import os
+
+                        # leia bytes/str
+                        data = file_obj.read()
+                        if isinstance(data, str):
+                            data_bytes = data.encode("utf-8")
+                        else:
+                            data_bytes = data
+
+                        tf = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+                        try:
+                            tf.write(data_bytes)
+                            tf.flush()
+                            tf.close()
+                            return _etl_read(tf.name, sep=sep)
+                        finally:
+                            try:
+                                os.unlink(tf.name)
+                            except Exception:
+                                pass
+                    # se não for possível recuperar, repropaga
+                    raise
+
+            # Expose a single stable name
+            read_sales_csv = _read_sales_csv_wrapper
+        else:
+            # Fallback that uses pandas if available.
+            def _read_sales_csv_fallback(file_obj, sep=","):
+                if pd is None:
+                    raise ModuleNotFoundError(
+                        "pandas não encontrado. Instale via 'pip install pandas' para executar o ETL."
+                    )
+                # pandas.read_csv aceita file-like; garantir ponteiro no início
+                try:
+                    if hasattr(file_obj, "seek"):
+                        file_obj.seek(0)
+                except Exception:
+                    pass
+                return pd.read_csv(file_obj, sep=sep)
+            # Expose a single stable name
+            read_sales_csv = _read_sales_csv_fallback
+    else:
         # Minimal fallbacks so the app can be analyzed/inspected without the etl module.
-        def read_sales_csv(file_obj, sep=","):
+        def _read_sales_csv_minimal(file_obj, sep=","):
             if pd is None:
                 raise ModuleNotFoundError(
                     "pandas não encontrado. Instale via 'pip install pandas' para executar o ETL."
                 )
             return pd.read_csv(file_obj, sep=sep)
 
+        read_sales_csv = _read_sales_csv_minimal
+
         def run_etl(*args, **kwargs):
             raise ModuleNotFoundError("módulo etl não encontrado")
 
-        def clean_product_df(df):
+        def _default_clean(df):
             return df
 
-        def clean_date_df(df):
-            return df
+        clean_product_df = _default_clean
+        clean_date_df = _default_clean
 
-        def aggregate_and_save(
-            df_prod=None, df_date=None, output_folder="streamlit_output", save_prefix=""
+        def _aggregate_and_save_minimal(
+            df_prod=None, df_date=None, output_folder="output", save_prefix=""
         ):
             # Retorna estrutura vazia compatível com o restante do app
-            return [], {}
+            return {}, {}
+
+        aggregate_and_save = _aggregate_and_save_minimal
 
 except Exception:
     # Em caso de erro inesperado, garantir que variáveis existam
     pd = None
 
-    def read_sales_csv(file_obj, sep=","):
+    def _read_sales_csv_error(file_obj, sep=","):
         raise ModuleNotFoundError("pandas não disponível")
+
+    read_sales_csv = _read_sales_csv_error
 
     def run_etl(*args, **kwargs):
         raise ModuleNotFoundError("etl não disponível")
@@ -146,10 +241,12 @@ except Exception:
     def clean_date_df(df):
         return df
 
-    def aggregate_and_save(
-        df_prod=None, df_date=None, output_folder="streamlit_output", save_prefix=""
+    def _aggregate_and_save_error(
+        df_prod=None, df_date=None, output_folder="output", save_prefix=""
     ):
-        return [], {}
+        return {}, {}
+
+    aggregate_and_save = _aggregate_and_save_error
 
 
 st.set_page_config(page_title="ETL Vendas - Análise", layout="wide")
@@ -186,12 +283,12 @@ if st.button("Rodar ETL"):
         date_df = None
         try:
             if prod_file:
-                prod_df_raw = read_sales_csv(prod_file, sep=sep_prod)
+                prod_df_raw = read_sales_csv(prod_file, sep=str(sep_prod))
                 prod_df = clean_product_df(prod_df_raw)
                 st.subheader("Preview - produto (limpo)")
                 st.dataframe(prod_df.head(50))
             if date_file:
-                date_df_raw = read_sales_csv(date_file, sep=sep_date)
+                date_df_raw = read_sales_csv(date_file, sep=str(sep_date))
                 date_df = clean_date_df(date_df_raw)
                 st.subheader("Preview - data (limpo)")
                 st.dataframe(date_df.head(50))

@@ -17,12 +17,20 @@ import secrets
 import time
 from pathlib import Path
 from typing import Optional, Tuple
+from logging.handlers import RotatingFileHandler
 
 # Configurar logging
+LOG_PATH = os.path.join("logs", "security.log")
+os.makedirs("logs", exist_ok=True)
+try:
+    file_handler = RotatingFileHandler(LOG_PATH, maxBytes=5 * 1024 * 1024, backupCount=5)
+except Exception:
+    file_handler = logging.FileHandler(LOG_PATH)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("security.log"), logging.StreamHandler()],
+    handlers=[file_handler, logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -46,22 +54,10 @@ class CredentialManager:
                     return json.load(f)
         except Exception as e:
             logger.warning(f"Erro ao carregar credenciais: {e}")
-
-        # Credenciais padrão (MUDE ANTES DE COLOCAR EM PRODUÇÃO)
-        # Format: {"users": {"username": {"password": "hash", "role": "user" , "pix_key": "..."}}}
-        default = {
-            "users": {
-                "admin": {
-                    "password": self._hash_password("admin123"),
-                    "role": "super_admin",
-                },
-                "usuario": {
-                    "password": self._hash_password("senha123"),
-                    "role": "user",
-                },
-            }
-        }
-        return default
+        # Não criar credenciais padrão automaticamente em produção.
+        # Retorne um dicionário vazio para forçar configuração explícita.
+        logger.warning("Nenhuma credencial encontrada; é necessário configurar .secrets/credentials.json")
+        return {"users": {}}
 
     @staticmethod
     def _hash_password(password: str) -> str:
@@ -116,6 +112,7 @@ class CredentialManager:
                 meta[u] = {"role": v.get("role", "user"), "pix_key": v.get("pix_key")}
             else:
                 meta[u] = {"role": "user", "pix_key": None}
+        # garantir metadados consistente
         return meta
 
     def get_user_metadata(self, username: str) -> dict:
@@ -137,7 +134,6 @@ class FileValidator:
         "text/plain",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "application/vnd.ms-excel",
-        "application/octet-stream",  # Parquet
         "application/json",
     }
 
@@ -169,25 +165,38 @@ class FileValidator:
 
         # 2. Verificar tamanho (maneira robusta para file-like objects)
         try:
-            # Alguns objetos (BytesIO) suportam getvalue()
-            if hasattr(file_obj, "getvalue"):
+            # Alguns objetos (BytesIO) suportam getbuffer()/getvalue()
+            if hasattr(file_obj, "getbuffer"):
+                file_size = len(file_obj.getbuffer())
+            elif hasattr(file_obj, "getvalue"):
+                # getvalue pode carregar muita memória, mas é comum em testes
                 file_size = len(file_obj.getvalue())
             else:
-                # fallback: seek para o fim e tell
+                # fallback: leia em chunks até o limite (não carrega inteiro na memória)
                 current = None
                 try:
                     current = file_obj.tell()
                 except Exception:
                     current = None
+                file_size = 0
                 try:
-                    file_obj.seek(0, os.SEEK_END)
-                    file_size = file_obj.tell()
-                finally:
+                    file_obj.seek(0)
+                except Exception:
+                    pass
+                chunk = file_obj.read(8192)
+                while chunk:
+                    file_size += len(chunk)
+                    if file_size > cls.MAX_FILE_SIZE:
+                        break
+                    chunk = file_obj.read(8192)
+                # reset pointer caso seja seekable
+                try:
                     if current is not None:
-                        try:
-                            file_obj.seek(current)
-                        except Exception:
-                            pass
+                        file_obj.seek(current)
+                    else:
+                        file_obj.seek(0)
+                except Exception:
+                    pass
         except Exception as e:
             logger.warning(f"Não foi possível determinar tamanho do arquivo: {e}")
             return False, "Não foi possível determinar tamanho do arquivo"
@@ -221,8 +230,9 @@ class FileValidator:
         ext = Path(filename).suffix.lower()
 
         magic_signatures = {
-            ".csv": [b"", b"\xef\xbb\xbf"],  # UTF-8 BOM ou texto
-            ".txt": [b"", b"\xef\xbb\xbf"],
+            # Require at least printable characters for CSV/TXT (avoid empty binary)
+            ".csv": [b"\n", b"\r", b"\xef\xbb\xbf"],
+            ".txt": [b"\n", b"\r", b"\xef\xbb\xbf"],
             ".xlsx": [b"PK\x03\x04"],  # ZIP signature
             ".xls": [b"\xd0\xcf\x11\xe0"],  # OLE2
             ".parquet": [b"PAR1"],
@@ -257,11 +267,107 @@ class FileValidator:
 
 # ==================== BLACKLIST (APLICAÇÃO) ====================
 BLACKLIST_FILE = ".secrets/blacklist.json"
+LOCKS_FILE = ".secrets/locks.json"
+
+
+def _ensure_locks():
+    try:
+        os.makedirs(".secrets", exist_ok=True)
+        if not os.path.exists(LOCKS_FILE):
+            with open(LOCKS_FILE, "w") as f:
+                json.dump({"failed": {}, "locked": {}}, f)
+            try:
+                os.chmod(LOCKS_FILE, 0o600)
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning(f"Erro ao garantir locks file: {e}")
+
+
+def _read_locks():
+    _ensure_locks()
+    try:
+        with open(LOCKS_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {"failed": {}, "locked": {}}
+
+
+def _write_locks(data: dict):
+    tmp = LOCKS_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f)
+    try:
+        os.replace(tmp, LOCKS_FILE)
+    except Exception:
+        with open(LOCKS_FILE, "w") as f:
+            json.dump(data, f)
+    try:
+        os.chmod(LOCKS_FILE, 0o600)
+    except Exception:
+        pass
+
+
+def register_failed_attempt(identifier: str, max_attempts: int = 5, window: int = 300, lock_time: int = 600):
+    """Registra tentativa falha e bloqueia se exceder `max_attempts` dentro de `window` segundos.
+    identifier pode ser username ou ip ou session id.
+    """
+    now = int(time.time())
+    data = _read_locks()
+    failed = data.get("failed", {})
+    lst = failed.get(identifier, [])
+    # manter só dentro da janela
+    lst = [ts for ts in lst if now - ts < window]
+    lst.append(now)
+    failed[identifier] = lst
+    data["failed"] = failed
+    # bloquear se necessário
+    if len(lst) >= max_attempts:
+        locked = data.get("locked", {})
+        locked[identifier] = now + lock_time
+        data["locked"] = locked
+        # limpar falhas
+        data["failed"][identifier] = []
+    _write_locks(data)
+
+
+def is_locked(identifier: str) -> bool:
+    data = _read_locks()
+    locked = data.get("locked", {})
+    now = int(time.time())
+    until = locked.get(identifier)
+    if until and now < until:
+        return True
+    # limpar bloqueio expirado
+    if until and now >= until:
+        locked.pop(identifier, None)
+        data["locked"] = locked
+        _write_locks(data)
+        return False
+    return False
+
+
+def reset_attempts(identifier: str):
+    data = _read_locks()
+    failed = data.get("failed", {})
+    if identifier in failed:
+        failed[identifier] = []
+    data["failed"] = failed
+    # também remover lock se existir
+    locked = data.get("locked", {})
+    if identifier in locked:
+        locked.pop(identifier, None)
+    data["locked"] = locked
+    _write_locks(data)
 
 
 def _ensure_blacklist():
     try:
         os.makedirs(".secrets", exist_ok=True)
+        try:
+            os.chmod(".secrets", 0o700)
+        except Exception:
+            pass
         if not os.path.exists(BLACKLIST_FILE):
             with open(BLACKLIST_FILE, "w") as f:
                 json.dump({"ips": {}}, f)
@@ -287,8 +393,20 @@ def add_to_blacklist(ip: str, reason: str = ""):
     except Exception:
         data = {"ips": {}}
     data["ips"][ip] = {"reason": reason, "time": int(time.time())}
-    with open(BLACKLIST_FILE, "w") as f:
+    # Escrita atômica simples: gravar em arquivo temporário e renomear
+    tmp = BLACKLIST_FILE + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(data, f)
+    try:
+        os.replace(tmp, BLACKLIST_FILE)
+    except Exception:
+        # fallback
+        with open(BLACKLIST_FILE, "w") as f:
+            json.dump(data, f)
+    try:
+        os.chmod(BLACKLIST_FILE, 0o600)
+    except Exception:
+        pass
     logger.info(f"IP adicionado à blacklist (aplicação): {ip} - {reason}")
 
 
