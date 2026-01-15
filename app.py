@@ -71,12 +71,17 @@ if "setup_done" not in st.session_state:
     setup_secure_environment()
     st.session_state.setup_done = True
 
-# CSS customizado para aparência Dark
+# CSS customizado para aparência Dark com background pattern
 st.markdown(
     """
 <style>
   :root { --bg:#0b1220; --card:#0f1724; --muted:#94a3b8; --accent:#7c3aed; --ok:#22c55e; }
-  .main .block-container{background-color:var(--bg); color:#e6eef8}
+  .main .block-container{
+    background-color:var(--bg); 
+    background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+DQogIDxkZWZzPg0KICAgIDxwYXR0ZXJuIGlkPSJncmlkIiB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiPg0KICAgICAgPHBhdGggZD0iTSA0MCAwIEwgMCAwIDAgNDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgxMjQsIDU4LCAyMzcsIDAuMDUpIiBzdHJva2Utd2lkdGg9IjEiLz4NCiAgICAgIDxjaXJjbGUgY3g9IjAiIGN5PSIwIiByPSIxLjUiIGZpbGw9InJnYmEoMTI0LCA1OCwgMjM3LCAwLjEpIi8+DQogICAgPC9wYXR0ZXJuPg0KICA8L2RlZnM+DQogIDxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSJ1cmwoI2dyaWQpIi8+DQo8L3N2Zz4=');
+    background-size: 200px 200px;
+    color:#e6eef8
+  }
   .dashboard-header{ background: linear-gradient(135deg,#0f1724 0%, #0b1220 100%); color: #e6eef8; padding:1.5rem; border-radius:8px; }
   .control-panel{ background:var(--card); color:#dbeafe; padding:1rem; border-radius:8px; border-left:4px solid var(--accent); }
   .status-badge{ display:inline-block; padding:0.4rem 0.8rem; border-radius:16px; font-weight:600 }
@@ -286,7 +291,7 @@ st.sidebar.title("⚙️ Configurações")
 
 file_format = st.sidebar.selectbox(
     "Formato do arquivo",
-    ["CSV", "Excel (.xlsx/.xls)", "Parquet (.parquet)", "Texto (.txt)"],
+    ["CSV", "Excel (.xlsx/.xls)", "Parquet (.parquet)", "Texto (.txt)", "PDF", "Imagem (OCR)"],
     key="file_format",
 )
 
@@ -313,6 +318,8 @@ file_type_map = {
     "Excel (.xlsx/.xls)": ["xlsx", "xls"],
     "Parquet (.parquet)": ["parquet"],
     "Texto (.txt)": ["txt"],
+    "PDF": ["pdf"],
+    "Imagem (OCR)": ["png", "jpg", "jpeg", "tiff", "bmp"],
 }
 
 allowed_types = file_type_map.get(file_format, ["csv"])
@@ -388,6 +395,34 @@ if uploaded_file is not None:
                     df = pd.read_excel(uploaded_file)
                 elif file_format == "Parquet (.parquet)":
                     df = pd.read_parquet(uploaded_file)
+                elif file_format == "PDF":
+                    # Processar PDF e extrair tabelas
+                    st.info("Extraindo tabelas do PDF...")
+                    upload_dir = os.path.join(
+                        "secure_uploads", st.session_state.username
+                    )
+                    os.makedirs(upload_dir, exist_ok=True)
+                    uploaded_file.seek(0)
+                    csvs = pdf_to_tables_csv(
+                        uploaded_file,
+                        upload_dir,
+                        prefix=st.session_state.username,
+                    )
+                    if csvs:
+                        # Carregar o primeiro CSV gerado
+                        df = pd.read_csv(csvs[0])
+                        st.success(f"✅ {len(csvs)} tabela(s) extraída(s) do PDF")
+                    else:
+                        st.error("❌ Nenhuma tabela encontrada no PDF")
+                        st.stop()
+                elif file_format == "Imagem (OCR)":
+                    # Processar imagem com OCR
+                    st.info("Processando imagem com OCR...")
+                    uploaded_file.seek(0)
+                    txt = image_to_text(uploaded_file)
+                    # Converter texto em DataFrame de uma coluna
+                    df = pd.DataFrame({"texto_extraido": txt.split('\n')})
+                    st.success("✅ Texto extraído da imagem")
                 else:  # Texto
                     df = pd.read_csv(uploaded_file, sep=separator, encoding=encoding)
 

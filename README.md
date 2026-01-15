@@ -9,11 +9,25 @@
 [![License](https://img.shields.io/github/license/Ramaswr/Banco-de-teste-BIG_DATA.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/Ramaswr/Banco-de-teste-BIG_DATA.svg)](https://github.com/Ramaswr/Banco-de-teste-BIG_DATA/releases)
 
-Pequeno projeto para rodar o ETL que você enviou, sem dependências do Google Colab. Inclui:
+## 🎯 Software de Alta Qualidade para Análise de Arquivos
 
-- `etl.py` — script CLI com funções de leitura, limpeza e agregação; gera CSVs de saída.
-- `app.py` — app web em Streamlit para upload dos arquivos, execução do ETL e download dos CSVs gerados.
-- `requirements.txt` — dependências mínimas.
+Sistema profissional para análise e processamento de dados com suporte a múltiplos formatos de arquivo:
+
+- **📊 CSV** — Leitura com detecção automática de encoding (UTF-8, Latin-1, CP1252)
+- **📈 Excel** — Suporte completo para .xlsx e .xls
+- **🗄️ Parquet** — Formato binário otimizado para big data
+- **📄 PDF** — Extração automática de tabelas
+- **🖼️ Imagens** — OCR para extrair texto de imagens (PNG, JPG, TIFF, BMP)
+- **📝 Texto** — Arquivos de texto com separadores personalizáveis
+
+### 🔧 Funcionalidades Principais
+
+- `etl.py` — Pipeline ETL completo com funções de leitura, limpeza e agregação
+- `app.py` — Interface web Streamlit moderna com dashboard interativo
+- `ocr.py` — OCR e extração de dados de PDFs e imagens
+- `security.py` — Sistema robusto de segurança e autenticação
+
+📂 **Veja a [documentação de organização](ORGANIZATION.md)** para entender a estrutura profissional do projeto.
 
 ## 🚀 Início Rápido (1 comando)
 
