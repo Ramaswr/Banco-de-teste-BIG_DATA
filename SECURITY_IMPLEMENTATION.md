@@ -3,52 +3,59 @@
 ## ✅ O Que Foi Feito
 
 ### 1. **Módulo de Segurança Completo** (`security.py`)
-   - ✅ Autenticação com hash PBKDF2-SHA256
-   - ✅ Validação robusta de arquivos (extensão, tamanho, magic bytes)
-   - ✅ Rate limiting (30 req/min) contra brute force
-   - ✅ Gerenciamento de sessão com timeout
-   - ✅ Sanitização de entrada (SQL, Command, Path)
-   - ✅ Logging automático em `security.log`
+
+- ✅ Autenticação com hash PBKDF2-SHA256
+- ✅ Validação robusta de arquivos (extensão, tamanho, magic bytes)
+- ✅ Rate limiting (30 req/min) contra brute force
+- ✅ Gerenciamento de sessão com timeout
+- ✅ Sanitização de entrada (SQL, Command, Path)
+- ✅ Logging automático em `security.log`
 
 ### 2. **Aplicação Protegida** (`app.py` - Atualizado)
-   - ✅ Tela de login obrigatória
-   - ✅ Validação de todos os uploads
-   - ✅ Botão de logout
-   - ✅ Status de usuário logado
-   - ✅ Banner de segurança visual
-   - ✅ Documentação de segurança integrada
+
+- ✅ Tela de login obrigatória
+- ✅ Validação de todos os uploads
+- ✅ Botão de logout
+- ✅ Status de usuário logado
+- ✅ Banner de segurança visual
+- ✅ Documentação de segurança integrada
 
 ### 3. **Configuração de Segurança** (`setup_security.sh`)
-   - ✅ Criação automática de diretórios seguros (modo 700)
-   - ✅ Configuração de .gitignore
-   - ✅ Template de credenciais
-   - ✅ Gerador de hash de senha
-   - ✅ Arquivo de configuração .env.security
+
+- ✅ Criação automática de diretórios seguros (modo 700)
+- ✅ Configuração de .gitignore
+- ✅ Template de credenciais
+- ✅ Gerador de hash de senha
+- ✅ Arquivo de configuração .env.security
 
 ### 4. **Documentação Completa** (`SECURITY.md`)
-   - ✅ Guia de segurança em português
-   - ✅ Instruções de alteração de credenciais
-   - ✅ Checklist de produção
-   - ✅ Resposta a incidentes
-   - ✅ Configurações avançadas
+
+- ✅ Guia de segurança em português
+- ✅ Instruções de alteração de credenciais
+- ✅ Checklist de produção
+- ✅ Resposta a incidentes
+- ✅ Configurações avançadas
 
 ### 5. **Dependências Atualizadas** (`requirements.txt`)
-   - ✅ openpyxl (Excel seguro)
-   - ✅ pyarrow (Parquet)
-   - ✅ pydantic (Validação)
-   - ✅ cryptography (Segurança extra)
+
+- ✅ openpyxl (Excel seguro)
+- ✅ pyarrow (Parquet)
+- ✅ pydantic (Validação)
+- ✅ cryptography (Segurança extra)
 
 ---
 
 ## 🚀 Como Usar
 
 ### Instalação Completa (1 comando)
+
 ```bash
 cd "/home/jerr/Downloads/Projeto extencionista BIG_DATA"
 ./run.sh
 ```
 
 ### Ou Passo a Passo
+
 ```bash
 # 1. Entrar na pasta
 cd "/home/jerr/Downloads/Projeto extencionista BIG_DATA"
@@ -72,6 +79,7 @@ streamlit run app.py
 ## 🔐 Credenciais de Teste
 
 **DEMO** (NÃO usar em produção):
+
 - **Usuário:** `admin` | **Senha:** `admin123`
 - **Usuário:** `usuario` | **Senha:** `senha123`
 
@@ -82,7 +90,7 @@ streamlit run app.py
 ## 🛡️ Proteções Ativas
 
 | Proteção | Status | Descrição |
-|----------|--------|-----------|
+| ---------- | -------- | ----------- |
 | 🔐 Autenticação | ✅ Ativa | Login com hash PBKDF2 |
 | ⏱️ Rate Limiting | ✅ Ativa | 30 req/min por usuário |
 | 📁 Validação de Arquivo | ✅ Ativa | Verifica extensão, tamanho, conteúdo |
@@ -95,7 +103,7 @@ streamlit run app.py
 
 ## 📁 Estrutura de Arquivos
 
-```
+```plaintext
 Projeto/
 ├── app.py                     # App Streamlit com autenticação
 ├── security.py                # Módulo de segurança
@@ -110,9 +118,9 @@ Projeto/
 │
 ├── secure_uploads/            # 🔒 Modo 700 (rwx------)
 │
-├── logs/                       # 🔒 Modo 700 (rwx------)
+├── logs/                      # 🔒 Modo 700 (rwx------)
 │
-└── security.log              # Log de auditoria (gerado)
+└── security.log               # Log de auditoria (gerado)
 ```
 
 ---
@@ -134,12 +142,14 @@ Projeto/
 ## 🔧 Próximos Passos
 
 ### Para Desenvolvimento
+
 1. ✅ Teste todas as proteções localmente
 2. ✅ Faça upload de diferentes tipos de arquivo
 3. ✅ Tente login com senhas incorretas
 4. ✅ Revise o `security.log`
 
 ### Para Produção
+
 1. 🔴 Altere credenciais em `security.py`
 2. 🔴 Configure `.secrets/credentials.json`
 3. 🔴 Habilite HTTPS
@@ -152,6 +162,7 @@ Projeto/
 ## 📚 Documentação Completa
 
 Leia `SECURITY.md` para:
+
 - ✅ Autenticação e credenciais
 - ✅ Validação de arquivos
 - ✅ Rate limiting
@@ -167,6 +178,7 @@ Leia `SECURITY.md` para:
 ## ⚠️ Avisos Importantes
 
 ❌ **NÃO FAÇA:**
+
 - Não commita `.secrets/` no Git
 - Não use senhas padrão em produção
 - Não exponha `security.log`
@@ -174,6 +186,7 @@ Leia `SECURITY.md` para:
 - Não compartilhe credenciais
 
 ✅ **FAÇA:**
+
 - Backup seguro de credenciais
 - Revise logs regularmente
 - Atualize dependências Python
@@ -185,6 +198,7 @@ Leia `SECURITY.md` para:
 ## 🎉 Conclusão
 
 Seu aplicativo agora está **robusto e seguro** contra:
+
 - ✅ Acessos não autorizados
 - ✅ Malware via upload
 - ✅ Brute force attacks

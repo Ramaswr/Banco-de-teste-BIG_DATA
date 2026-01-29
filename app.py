@@ -183,26 +183,24 @@ def login_page():
             st.stop()
 
         if st.button("🔓 Entrar", use_container_width=True, key="btn_login"):
-                if username and password:
-                    if is_locked(username):
-                        st.error("❌ Conta temporariamente bloqueada. Consulte os administradores.")
-                    elif credentials.authenticate(username, password):
-                        # sucesso: resetar tentativas e criar sessão
-                        reset_attempts(username)
-                        reset_attempts(session_id)
-                        session_id = session_manager.create_session(username)
-                        st.session_state.session_id = session_id
-                        st.session_state.authenticated = True
-                        st.session_state.username = username
-                        st.success(f"Sejam bem-vindo a Jerr_BIG-DATE, {username}!")
-                        st.rerun()
-                    else:
-                        # registrar falha persistente
-                        register_failed_attempt(username)
-                        register_failed_attempt(session_id)
-                        st.error("❌ Usuário ou senha incorretos")
+            if username and password:
+                if is_locked(username):
+                    st.error("❌ Conta temporariamente bloqueada. Consulte os administradores.")
+                elif credentials.authenticate(username, password):
+                    # sucesso: resetar tentativas e criar sessão
+                    reset_attempts(username)
+                    reset_attempts(session_id)
+                    session_id = session_manager.create_session(username)
+                    st.session_state.session_id = session_id
+                    st.session_state.authenticated = True
+                    st.session_state.username = username
+                    st.success(f"Sejam bem-vindo a Jerr_BIG-DATE, {username}!")
+                    st.rerun()
                 else:
-                    st.warning("⚠️ Preencha usuário e senha")
+                    # registrar falha persistente
+                    register_failed_attempt(username)
+                    register_failed_attempt(session_id)
+                    st.error("❌ Usuário ou senha incorretos")
             else:
                 st.warning("⚠️ Preencha usuário e senha")
 
@@ -227,6 +225,10 @@ def login_page():
                 st.error("Usuário e senha são obrigatórios")
             elif r_password != r_password2:
                 st.error("As senhas não coincidem")
+            elif not user_mgmt._is_strong_password(r_password):
+                st.error(
+                    "Senha fraca: mínimo 12 caracteres, ao menos uma maiúscula, uma minúscula, um dígito e um caractere especial"
+                )
             else:
                 try:
                     user_mgmt.create_user(
@@ -522,9 +524,9 @@ if uploaded_file is not None:
                                 st.success(
                                     f"✅ Conversão concluída: {len(csvs)} arquivos gerados em secure_uploads/{user_for_meta}"
                                 )
-                            except Exception as e3:
-                                logger.exception("Erro no processamento OCR")
-                                st.error("❌ Erro interno no processamento OCR. Consulte os logs.")
+                        except Exception as e3:
+                            logger.exception("Erro no processamento OCR")
+                            st.error("❌ Erro interno no processamento OCR. Consulte os logs.")
                 except Exception:
                     pass
 

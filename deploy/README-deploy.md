@@ -8,6 +8,7 @@ A) Usar Caddy (recomendado, configura TLS automaticamente)
 B) Usar Nginx + Certbot (Let's Encrypt)
 
 Pré-requisitos:
+
 - Servidor com IP público e um domínio (ex.: `yourdomain.example`)
 - Entrada DNS `A` apontando para o IP do servidor
 - Acesso root (sudo) ao servidor para instalar serviços e colocar configs
@@ -27,9 +28,9 @@ sudo systemctl status streamlit-jerr.service
 
 Isto executa o Streamlit ligado somente a `127.0.0.1:8501`, o que é seguro para ser colocado atrás de um reverse-proxy.
 
-2) Opção A — Caddy (auto TLS — mais simples)
+1) Opção A — Caddy (auto TLS — mais simples)
 
-- Instalar Caddy (https://caddyserver.com/docs/install)
+- Instalar Caddy ([documentação de instalação](https://caddyserver.com/docs/install))
 - Criar `/etc/caddy/Caddyfile` com o conteúdo em `deploy/Caddyfile` substituindo `YOUR_DOMAIN` e `you@example.com`.
 - Reiniciar Caddy:
 
@@ -40,7 +41,7 @@ sudo journalctl -u caddy -f
 
 Caddy automaticamente obtém certificados e serve HTTPS, com proxy reverso para `localhost:8501`.
 
-3) Opção B — Nginx + Certbot
+1) Opção B — Nginx + Certbot
 
 - Copie `deploy/nginx/jerr_big_date.conf` para `/etc/nginx/sites-available/jerr_big_date` e ajuste `YOUR_DOMAIN`.
 
@@ -66,7 +67,7 @@ sudo systemctl status certbot.timer
 sudo certbot renew --dry-run
 ```
 
-4) Firewall (UFW exemplo)
+1) Firewall (UFW exemplo)
 
 ```bash
 # permitir SSH
@@ -81,14 +82,14 @@ sudo ufw enable
 sudo ufw status
 ```
 
-5) Boas práticas finais
+1) Boas práticas finais
 
 - Nunca exponha a pasta do projeto diretamente como webroot do Nginx — use o proxy para encaminhar para localhost.
 - Proteja `.secrets/` com permissão 700 e não commite no Git.
 - Monitore `security.log` e os logs do systemd (`journalctl -u streamlit-jerr -f`).
 - Considere usar fail2ban para proteger contra tentativas repetidas de login.
 
-6) Testes
+1) Testes
 
 - Acesse `https://YOUR_DOMAIN` após apontar DNS e configurar proxy/TLS.
 - Teste login com usuário `Jerr` e sua senha.

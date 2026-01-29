@@ -4,7 +4,6 @@
 
 **Pasta local do projeto:** `JERR_BIG-DATA`
 
-
 [![CI](https://github.com/Ramaswr/Banco-de-teste-BIG_DATA/actions/workflows/python-package.yml/badge.svg)](https://github.com/Ramaswr/Banco-de-teste-BIG_DATA/actions/workflows/python-package.yml)
 [![License](https://img.shields.io/github/license/Ramaswr/Banco-de-teste-BIG_DATA.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/Ramaswr/Banco-de-teste-BIG_DATA.svg)](https://github.com/Ramaswr/Banco-de-teste-BIG_DATA/releases)
@@ -34,19 +33,32 @@ Se desejar expor o app na rede (por exemplo em uma LAN ou servidor público) man
 PUBLIC_MODE=1 ./run.sh
 ```
 
-2. Ajuste permissões para deixar arquivos do projeto legíveis (somente leitura para outros) e proteger diretórios sensíveis:
+1. Ajuste permissões para deixar arquivos do projeto legíveis (somente leitura para outros) e proteger diretórios sensíveis:
 
 ```bash
 # Executar script que aplica permissões seguras
 ./make_public_readonly.sh
 ```
 
-3. Recomendado (IMPORTANTE para produção):
+**Credenciais de produção**:
+
+- Configure `.secrets/credentials.json` antes de expor o app em produção. Um exemplo está em `.secrets/credentials.example.json`.
+- Para gerar um arquivo de credenciais seguro, rode:
+
+```bash
+python scripts/create_credentials.py --username admin --role super_admin
+```
+
+O comando pedirá a senha e gravará o arquivo `.secrets/credentials.json` com permissão `600`.
+
+1. Recomendado (IMPORTANTE para produção):
+
 - Coloque o app atrás de um reverse-proxy (nginx/caddy) e habilite HTTPS/TLS.
 - Configure firewall para limitar IPs que podem acessar o serviço.
 - Não compartilhe `.secrets/credentials.json`; ele permanece protegido (modo 600).
 
 Com essa configuração:
+
 - O app exige login (`Jerr` + sua senha) para executar funcionalidades.
 - Usuários externos poderão acessar a interface e executar o app (se autenticados), mas não poderão alterar os arquivos do projeto (apenas leitura).
 - Diretórios sensíveis (`.secrets`, `secure_uploads`, `logs`) têm permissões restritas (700).
@@ -54,35 +66,36 @@ Com essa configuração:
 ----
 
 Este script irá:
+
 - ✓ Criar ambiente virtual (se necessário)
 - ✓ Instalar todas as dependências
-- ✓ Abrir o navegador automaticamente em http://localhost:8501
+- ✓ Abrir o navegador automaticamente em [http://localhost:8501](http://localhost:8501)
 - ✓ Iniciar o app Streamlit
 
 **Pronto em 1 linha!**
 
 ## Como usar
 
-### 1) Criar e ativar um ambiente virtual (recomendado):
+### 1) Criar e ativar um ambiente virtual (recomendado)
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 ```
 
-### 2) Instalar dependências:
+### 2) Instalar dependências
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3) Rodar o app web (Streamlit):
+### 3) Rodar o app web (Streamlit)
 
 ```bash
 streamlit run app.py
 ```
 
-### 4) Usar o CLI (opcional):
+### 4) Usar o CLI (opcional)
 
 ```bash
 python etl.py --product caminho/produto.csv --date caminho/date.csv --output resultados
@@ -102,19 +115,20 @@ python etl.py --product caminho/produto.csv --date caminho/date.csv --output res
 
 Se preferir executar o app em um container (evita instalação local de dependências e garante ambiente reprodutível), use o Dockerfile incluído.
 
-### 1) Construir a imagem:
+### 1) Construir a imagem
 
 ```bash
 docker build -t etl-vendas:latest .
 ```
 
-### 2) Rodar o container:
+### 2) Rodar o container
 
 ```bash
 docker run --rm -p 8501:8501 -v "$PWD/streamlit_output":/app/streamlit_output etl-vendas:latest
 ```
 
 Observações:
+
 - O comando acima monta a pasta local `streamlit_output` dentro do container para persistir os CSVs gerados.
 - Use `--rm` para remover o container quando ele for parado.
 - Se estiver em Windows PowerShell, ajuste a sintaxe do caminho do volume.
@@ -132,11 +146,13 @@ Observações:
 Para garantir que o arquivo `zip_Jerr.js` não foi corrompido durante o download:
 
 **Linux/Mac:**
+
 ```bash
 sha256sum -c zip_Jerr.js.sha256
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 certUtil -hashfile zip_Jerr.js SHA256
 ```

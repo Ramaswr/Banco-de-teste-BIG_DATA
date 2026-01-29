@@ -37,7 +37,10 @@ def read_sales_csv(
                 return df
             except Exception as e:
                 last_err = e
-        raise last_err
+        if last_err is not None:
+            raise last_err
+        else:
+            raise RuntimeError("Falha no ETL: erro não capturado detalhadamente.")
     else:
         for enc in encoding_candidates:
             try:
@@ -46,7 +49,10 @@ def read_sales_csv(
                 return df
             except Exception as e:
                 last_err = e
-        raise last_err
+        if last_err is not None:
+            raise last_err
+        else:
+            raise RuntimeError("Falha no ETL: erro não capturado detalhadamente.")
 
 
 def to_int_safe(x):
