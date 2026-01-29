@@ -83,3 +83,4 @@ Dockerfile
 security.log
 secure_uploads/
 logs/
+.secrets/

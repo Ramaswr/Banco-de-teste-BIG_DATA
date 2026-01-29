@@ -73,13 +73,6 @@ if [ "${PUBLIC_MODE:-0}" != "1" ]; then
     start http://localhost:8501 &
   fi
 fi
-elif command -v open &> /dev/null; then
-  # macOS
-  open http://localhost:8501 &
-elif command -v start &> /dev/null; then
-  # Windows
-  start http://localhost:8501 &
-fi
 
 # 6. Executar Streamlit
 if [ "${PUBLIC_MODE:-0}" = "1" ]; then
