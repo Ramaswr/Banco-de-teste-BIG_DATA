@@ -10,6 +10,7 @@ Streamlit app robusto com painel de controle para leitura de múltiplos formatos
 import importlib
 import io
 import os
+import security
 
 import users as user_mgmt
 from ocr import image_to_text, pdf_to_tables_csv, save_text_as_csv_for_user
@@ -24,6 +25,11 @@ from security import (
     register_failed_attempt,
     reset_attempts,
 )
+
+# Safe fallbacks for optional persistent session helpers in security.py
+validate_persistent_session = getattr(security, "validate_persistent_session", lambda token: None)
+create_persistent_session = getattr(security, "create_persistent_session", lambda username: None)
+revoke_persistent_session = getattr(security, "revoke_persistent_session", lambda token: None)
 
 # Importar dependências
 try:
@@ -46,69 +52,22 @@ try:
 except Exception:
     plt = None
 
-try:
-    import etl as etl_module
 
-    # Bind known functions from etl (with safe fallbacks) and wrap aggregate_and_save
-    read_sales_csv = getattr(
-        etl_module, "read_sales_csv", lambda file_obj, sep=",": pd.read_csv(file_obj, sep=sep)
-    )
-    clean_product_df = getattr(etl_module, "clean_product_df", lambda df: df)
-    clean_date_df = getattr(etl_module, "clean_date_df", lambda df: df)
-
-    def aggregate_and_save(df_prod=None, df_date=None, output_folder="streamlit_output", save_prefix=""):
-        """
-        Wrapper around etl_module.aggregate_and_save that normalizes different return shapes:
-        - If underlying function returns (dict, dict), convert the first element to a list of paths/keys.
-        - If it returns (list, dict), return as-is.
-        """
-        if not hasattr(etl_module, "aggregate_and_save"):
-            return [], {}
-        res = etl_module.aggregate_and_save(
-            df_prod=df_prod, df_date=df_date, output_folder=output_folder, save_prefix=save_prefix
-        )
-        try:
-            out0, out1 = res
-        except Exception:
-            return [], {}
-        # If first element is a dict, convert to a list (prefer string values as file paths)
-        if isinstance(out0, dict):
-            try:
-                values = [v for v in out0.values() if isinstance(v, str)]
-                out_paths = values if values else list(out0.keys())
-            except Exception:
-                out_paths = list(out0)
-            return out_paths, out1
-        return out0, out1
-
-except Exception:
-    # Fallbacks
-    def read_sales_csv(file_obj, sep=","):
-        return pd.read_csv(file_obj, sep=sep)
-
-    def clean_product_df(df):
-        return df
-
-    def clean_date_df(df):
-        return df
-
-    def aggregate_and_save_fallback(
-        df_prod=None, df_date=None, output_folder="streamlit_output", save_prefix=""
-    ):
-        return [], {}
-
-    # Assign fallback implementation to aggregate_and_save name when ETL import fails
-    aggregate_and_save = aggregate_and_save_fallback
+from powerbi_push import push_dataframe_to_powerbi
 
 
-def _sanitize_cell_for_csv(val):
-    """Mitiga CSV/Formula injection: prefixa ' para células perigosas."""
+def _sanitize_cell_for_csv(value):
+    """Sanitize a single cell string to avoid CSV injection and invalid characters."""
+    if value is None:
+        return ""
     try:
-        if isinstance(val, str) and val and val[0] in ("=", "+", "-", "@"):
-            return "'" + val
+        text = str(value)
     except Exception:
-        pass
-    return val
+        text = ""
+    text = text.replace("\x00", "").replace("\r", " ").replace("\n", " ")
+    if text.startswith(("=", "+", "-", "@")):
+        text = "'" + text
+    return text
 
 
 def sanitize_dataframe_for_export(df):
@@ -120,6 +79,58 @@ def sanitize_dataframe_for_export(df):
         logger.exception("Falha ao sanitizar dataframe para export")
         return df
 
+
+def clean_product_df(df):
+    """
+    Limpeza básica de dados de produto/vendas para ETL.
+    - Remove linhas totalmente vazias
+    - Preenche valores nulos com string vazia
+    - Tira espaços extras de colunas string
+    """
+    if df is None:
+        return df
+    try:
+        df = df.dropna(how="all")
+        df = df.fillna("")
+        # strip em colunas string
+        for col in df.select_dtypes(include=["object"]).columns:
+            df[col] = df[col].astype(str).str.strip()
+        return df
+    except Exception:
+        logger.exception("Erro ao limpar dataframe de produtos")
+        return df
+
+
+def aggregate_and_save(df_prod, output_folder):
+    """
+    Agregação simples por 'produto' e opcionalmente 'data', salvando CSVs.
+    Retorna (lista_de_arquivos, relatorios_dict).
+    """
+    try:
+        os.makedirs(output_folder, exist_ok=True)
+        reports = {}
+        out_paths = []
+
+        # se colunas esperadas existirem, agregue
+        if "produto" in df_prod.columns:
+            grouped = df_prod.groupby("produto").size().reset_index(name="qtd")
+            path = os.path.join(output_folder, "agregado_produto.csv")
+            grouped.to_csv(path, index=False)
+            out_paths.append(path)
+            reports["por_produto"] = grouped
+
+        if {"produto", "data"}.issubset(df_prod.columns):
+            grouped_dt = df_prod.groupby(["data", "produto"]).size().reset_index(name="qtd")
+            path = os.path.join(output_folder, "agregado_produto_data.csv")
+            grouped_dt.to_csv(path, index=False)
+            out_paths.append(path)
+            reports["por_data_produto"] = grouped_dt
+
+        return out_paths, reports
+    except Exception:
+        logger.exception("Erro ao agregar e salvar dados de produtos")
+        return [], {}
+        
 
 # ==================== CONFIGURAÇÃO ====================
 st.set_page_config(
@@ -152,6 +163,19 @@ st.markdown(
 
 
 # ==================== AUTENTICAÇÃO ====================
+# Restaura sessão via token no query param (?auth=...)
+params = st.query_params
+_qtoken = params.get("auth")
+if isinstance(_qtoken, list):
+    _qtoken = _qtoken[0]
+_restored = validate_persistent_session(_qtoken) if _qtoken else None
+if _restored:
+    st.session_state["authenticated"] = True
+    st.session_state["username"] = _restored
+    st.session_state["auth_token"] = _qtoken
+    if "session_id" not in st.session_state:
+        st.session_state["session_id"] = session_manager.create_session(_restored)
+
 def login_page():
     """Página de login segura."""
     st.markdown(
@@ -187,13 +211,16 @@ def login_page():
                 if is_locked(username):
                     st.error("❌ Conta temporariamente bloqueada. Consulte os administradores.")
                 elif credentials.authenticate(username, password):
-                    # sucesso: resetar tentativas e criar sessão
                     reset_attempts(username)
                     reset_attempts(session_id)
                     session_id = session_manager.create_session(username)
                     st.session_state.session_id = session_id
                     st.session_state.authenticated = True
                     st.session_state.username = username
+                    # cria token persistente e grava no query param
+                    tok = create_persistent_session(username)
+                    st.session_state["auth_token"] = tok
+                    st.query_params["auth"] = tok
                     st.success(f"Sejam bem-vindo a Jerr_BIG-DATE, {username}!")
                     st.rerun()
                 else:
@@ -315,9 +342,11 @@ with col_user:
 with col_logout:
     if st.button("🚪 Sair", key="btn_logout", use_container_width=True):
         session_manager.destroy_session(session_id)
-        st.session_state.authenticated = False
-        st.session_state.username = None
-        st.success("Logout realizado com sucesso!")
+        tok = st.session_state.get("auth_token")
+        if tok:
+            revoke_persistent_session(tok)
+        st.query_params.clear()  # limpa ?auth
+        st.session_state.clear()
         st.rerun()
 
 st.markdown(
@@ -366,8 +395,18 @@ st.sidebar.title("⚙️ Configurações")
 
 file_format = st.sidebar.selectbox(
     "Formato do arquivo",
-    ["CSV", "Excel (.xlsx/.xls)", "Parquet (.parquet)", "Texto (.txt)"],
+    [
+       "CSV",
+        "Excel (.xlsx/.xls)",
+        "Parquet (.parquet)",
+        "Texto (.txt)",
+        "JSON (.json)",
+        "JSONL (.jsonl)",
+       
+    ],
+    
     key="file_format",
+        
 )
 
 separator = st.sidebar.selectbox(
@@ -393,7 +432,10 @@ file_type_map = {
     "Excel (.xlsx/.xls)": ["xlsx", "xls"],
     "Parquet (.parquet)": ["parquet"],
     "Texto (.txt)": ["txt"],
+    "JSON (.json)": ["json"],
+    "JSONL (.jsonl)": ["jsonl"],
 }
+
 
 allowed_types = file_type_map.get(file_format, ["csv"])
 
@@ -571,6 +613,14 @@ if st.session_state.current_df is not None:
         st.metric("Formato", st.session_state.file_info.get("format", "N/A"))
     with col4:
         st.metric("Arquivo", st.session_state.file_info.get("name", "N/A")[:20] + "...")
+
+    # Botão de envio ao Power BI
+    if st.button("🚀 Enviar para Power BI", key="btn_pbi", use_container_width=True):
+        try:
+            status = push_dataframe_to_powerbi(st.session_state.current_df)
+            st.success(f"Enviado ao Power BI (status {status})")
+        except Exception as e:
+            st.error(f"Falha ao enviar para Power BI: {e}")
 
     # Tabs para diferentes visualizações
     tab1, tab2, tab3, tab4, tab5 = st.tabs(
