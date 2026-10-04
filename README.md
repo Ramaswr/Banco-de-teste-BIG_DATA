@@ -162,3 +162,7 @@ Se o checksum corresponder, o arquivo está íntegro e pronto para uso/análise.
 ## 📖 Licença
 
 MIT License — veja [LICENSE](LICENSE) para detalhes.
+
+## Executar no Google Colab
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/)

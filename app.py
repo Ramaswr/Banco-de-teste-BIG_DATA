@@ -510,6 +510,10 @@ if uploaded_file is not None:
                     df = pd.read_excel(uploaded_file)
                 elif file_format == "Parquet (.parquet)":
                     df = pd.read_parquet(uploaded_file)
+                elif file_format == "JSON (.json)":
+                    df = pd.read_json(uploaded_file, encoding=encoding)
+                elif file_format == "JSONL (.jsonl)":
+                    df = pd.read_json(uploaded_file, lines=True, encoding=encoding)
                 else:  # Texto
                     df = pd.read_csv(uploaded_file, sep=separator, encoding=encoding)
 

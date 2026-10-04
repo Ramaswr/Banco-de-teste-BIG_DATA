@@ -96,6 +96,9 @@ class CredentialManager:
         stored_hash = (
             user_entry.get("password") if isinstance(user_entry, dict) else user_entry
         )
+        if not isinstance(stored_hash, str):
+            logger.warning(f"Hash de senha inválido ou ausente para usuário: {username}")
+            return False
         is_valid = self._verify_password(password, stored_hash)
 
         if is_valid:
@@ -126,7 +129,7 @@ class FileValidator:
     """Validador de arquivos para prevenir uploads maliciosos."""
 
     # Extensões permitidas
-    ALLOWED_EXTENSIONS = {"csv", "txt", "xlsx", "xls", "parquet", "json", "tsv"}
+    ALLOWED_EXTENSIONS = {"csv", "txt", "xlsx", "xls", "parquet", "json", "jsonl", "tsv"}
 
     # MIME types permitidos
     ALLOWED_MIMES = {
@@ -268,6 +271,7 @@ class FileValidator:
 # ==================== BLACKLIST (APLICAÇÃO) ====================
 BLACKLIST_FILE = ".secrets/blacklist.json"
 LOCKS_FILE = ".secrets/locks.json"
+SESSIONS_FILE = ".secrets/sessions.json"
 
 
 def _ensure_locks():
